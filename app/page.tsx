@@ -964,7 +964,6 @@ type WorkTask = {
   name: string;
 };
 type WorkZone = { id: string; code: string; name: string };
-type WorkAllocation = { task_id: string; zone_id: string };
 type DailyTimeEntry = {
   person_id: string;
   hours: number | string;
@@ -987,7 +986,6 @@ function Pointage({
   const [peopleRows, setPeopleRows] = useState<PersonRow[]>([]);
   const [taskRows, setTaskRows] = useState<WorkTask[]>([]);
   const [zoneRows, setZoneRows] = useState<WorkZone[]>([]);
-  const [workAllocations, setWorkAllocations] = useState<WorkAllocation[]>([]);
   const [assignedHours, setAssignedHours] = useState<Record<string, number>>(
     {},
   );
@@ -1015,7 +1013,6 @@ function Pointage({
       { data: persons },
       { data: loadedTasks },
       { data: loadedZones },
-      { data: loadedAllocations },
       { data: dailyEntries },
     ] = await Promise.all([
       db
@@ -1036,10 +1033,6 @@ function Pointage({
         .select("id,code,name")
         .eq("project_id", project.id)
         .order("code"),
-      db
-        .from("zone_task_budget_allocations")
-        .select("task_id,zone_id")
-        .eq("project_id", project.id),
       db
         .from("time_entries")
         .select("person_id,hours,tasks(code),zones(code)")
@@ -1067,12 +1060,18 @@ function Pointage({
     setPeopleRows((persons ?? []) as unknown as PersonRow[]);
     setTaskRows((loadedTasks ?? []) as WorkTask[]);
     setZoneRows((loadedZones ?? []) as WorkZone[]);
-    setWorkAllocations((loadedAllocations ?? []) as WorkAllocation[]);
     setAssignedHours(totals);
     setDailyAssignments(summaries);
-    const firstAllocation = loadedAllocations?.[0];
-    setTaskId((current) => current || firstAllocation?.task_id || loadedTasks?.[0]?.id || "");
-    setZoneId((current) => current || firstAllocation?.zone_id || "");
+    setTaskId((current) =>
+      loadedTasks?.some((task) => task.id === current)
+        ? current
+        : loadedTasks?.[0]?.id || "",
+    );
+    setZoneId((current) =>
+      loadedZones?.some((zone) => zone.id === current)
+        ? current
+        : loadedZones?.[0]?.id || "",
+    );
     setLoading(false);
   }
   useEffect(() => {
@@ -1081,10 +1080,8 @@ function Pointage({
   }, [workDate]);
   const currentTask = taskRows.find((task) => task.id === taskId);
   const selectedZone = zoneRows.find((zone) => zone.id === zoneId);
-  const allocatedTaskIds = new Set(workAllocations.map((allocation) => allocation.task_id));
-  const availableTasks = taskRows.filter((task) => allocatedTaskIds.has(task.id));
-  const availableZoneIds = new Set(workAllocations.filter((allocation) => allocation.task_id === taskId).map((allocation) => allocation.zone_id));
-  const availableZones = zoneRows.filter((zone) => availableZoneIds.has(zone.id));
+  const availableTasks = taskRows;
+  const availableZones = zoneRows;
   function toggle(id: string) {
     setSelectedIds((current) =>
       current.includes(id)
@@ -1244,9 +1241,7 @@ function Pointage({
               <select
                 value={taskId}
                 onChange={(event) => {
-                  const nextTaskId = event.target.value;
-                  setTaskId(nextTaskId);
-                  setZoneId(workAllocations.find((allocation) => allocation.task_id === nextTaskId)?.zone_id ?? "");
+                  setTaskId(event.target.value);
                 }}
               >
                 {availableTasks.map((task) => (
