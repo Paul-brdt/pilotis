@@ -1050,7 +1050,18 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 5px;
+  scrollbar-width: thin;
+  scrollbar-color: #50746b transparent;
+  overscroll-behavior: contain;
 }
+.sidebar nav::-webkit-scrollbar { width: 5px; }
+.sidebar nav::-webkit-scrollbar-track { background: transparent; }
+.sidebar nav::-webkit-scrollbar-thumb { background: #50746b; border-radius: 8px; }
 .sidebar button {
   border: 0;
   background: none;
@@ -1081,6 +1092,7 @@ body {
   border-top: 1px solid #31564d;
   padding-top: 10px;
   position: relative;
+  flex: 0 0 auto;
 }
 .sidebar-bottom > button {
   width: 100%;
