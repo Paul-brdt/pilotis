@@ -210,34 +210,59 @@ export async function POST(request: Request) {
       if (!task || !zone || (activePeople?.length ?? 0) !== personIds.length) return Response.json({ error: "Une personne, une tâche ou une zone n’est plus disponible." }, { status: 400 });
       const { error } = await db.from("time_entries").insert(personIds.map(personId => ({ project_id: project.id, person_id: personId, task_id: taskId, zone_id: zoneId, work_date: workDate, hours, comment: String(body.comment || ""), created_by: user.id })));
       if (error) throw error;
-    } else if (body.kind === "stock-item-create") {
+    } else if (body.kind === "stock-item-create" || body.kind === "stock-item-update") {
       const { data: profile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
       if (!profile || !["administrateur", "bureau", "magasinier"].includes(profile.role)) return Response.json({ error: "Vous n’êtes pas autorisé à gérer le catalogue de stock." }, { status: 403 });
       const reference = String(body.reference ?? "").trim().toUpperCase(); const name = String(body.name ?? "").trim(); const category = String(body.category ?? ""); const unit = String(body.unit ?? ""); const minimumQuantity = Number(body.minimumQuantity ?? 0);
       const validCategories = ["Câble", "Cheminements", "Luminaires", "Supportage", "Boulonnerie", "Colliers", "Galva"];
       const validUnits = ["u", "m", "ml", "kg", "l", "boîte", "paquet"];
       if (!reference || !name || !validCategories.includes(category) || !validUnits.includes(unit) || !Number.isFinite(minimumQuantity) || minimumQuantity < 0) return Response.json({ error: "Les informations de l’article sont invalides." }, { status: 400 });
-      const { data: item, error } = await db.from("stock_items").insert({ project_id: project.id, reference, name, category, unit, minimum_quantity: minimumQuantity, ordered_quantity: 0, received_quantity: 0 }).select("id,reference").single();
+      const values = { reference, name, category, unit, minimum_quantity: minimumQuantity, active: Boolean(body.active ?? true) };
+      const result = body.kind === "stock-item-create"
+        ? await db.from("stock_items").insert({ ...values, project_id: project.id, ordered_quantity: 0, received_quantity: 0 }).select("id,reference").single()
+        : await db.from("stock_items").update(values).eq("project_id", project.id).eq("id", String(body.stockItemId ?? "")).select("id,reference").single();
+      const { data: item, error } = result;
       if (error) { if (error.code === "23505") return Response.json({ error: "Cette référence existe déjà." }, { status: 409 }); throw error; }
       await db.from("audit_events").insert({ project_id: project.id, action: "stock-item-create", entity_type: "stock_item", entity_id: item.id, payload: { reference, name, category, unit, minimumQuantity }, actor_id: user.id });
       return Response.json({ ok: true, item });
+    } else if (body.kind === "stock-location-create") {
+      const { data: profile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
+      if (!profile || !["administrateur", "bureau", "magasinier"].includes(profile.role)) return Response.json({ error: "Vous n’êtes pas autorisé à gérer les emplacements." }, { status: 403 });
+      const name = String(body.name ?? "").trim(); const code = String(body.code ?? "").trim().toUpperCase() || null;
+      if (!name) return Response.json({ error: "Le nom de l’emplacement est obligatoire." }, { status: 400 });
+      const { data: location, error } = await db.from("stock_locations").insert({ project_id: project.id, name, code, created_by: user.id }).select("id,name").single();
+      if (error) { if (error.code === "23505") return Response.json({ error: "Cet emplacement existe déjà." }, { status: 409 }); throw error; }
+      return Response.json({ ok: true, location });
     } else if (body.kind === "stock") {
       const { data: profile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
       if (!profile || !["administrateur", "bureau", "magasinier"].includes(profile.role)) return Response.json({ error: "Vous n’êtes pas autorisé à enregistrer des mouvements de stock." }, { status: 403 });
-      const [{ data: item }, { data: person }, { data: zone }] = await Promise.all([
-        db.from("stock_items").select("id").eq("project_id", project.id).eq("id", String(body.stockItemId ?? "")).maybeSingle(),
+      const movementType = String(body.movementType); const sourceLocationId = String(body.sourceLocationId ?? ""); const destinationLocationId = String(body.destinationLocationId ?? "");
+      const [{ data: item }, { data: person }, { data: zone }, { data: source }, { data: destination }] = await Promise.all([
+        db.from("stock_items").select("id").eq("project_id", project.id).eq("id", String(body.stockItemId ?? "")).eq("active", true).maybeSingle(),
         body.personId ? db.from("people").select("id").eq("project_id", project.id).eq("id", String(body.personId)).eq("active", true).maybeSingle() : Promise.resolve({ data: null }),
         body.zoneId ? db.from("zones").select("id").eq("project_id", project.id).eq("id", String(body.zoneId)).maybeSingle() : Promise.resolve({ data: null }),
+        sourceLocationId ? db.from("stock_locations").select("id").eq("project_id", project.id).eq("id", sourceLocationId).eq("active", true).maybeSingle() : Promise.resolve({ data: null }),
+        destinationLocationId ? db.from("stock_locations").select("id").eq("project_id", project.id).eq("id", destinationLocationId).eq("active", true).maybeSingle() : Promise.resolve({ data: null }),
       ]);
       const quantity = Number(body.quantity);
-      if (!item || !["entree", "sortie"].includes(String(body.movementType)) || !Number.isFinite(quantity) || quantity <= 0) return Response.json({ error: "Mouvement invalide" }, { status: 400 });
-      if (body.movementType === "sortie" && (!person || !zone)) return Response.json({ error: "Sélectionnez une personne et une zone d’affectation." }, { status: 400 });
-      const storageZone = String(body.storageZone ?? "").trim(); const note = String(body.note ?? "").trim() || null;
-      if (body.movementType === "entree" && !storageZone) return Response.json({ error: "Renseignez la zone de stockage." }, { status: 400 });
-      const { data: existingMovements } = await db.from("stock_movements").select("movement_type,quantity").eq("project_id", project.id).eq("stock_item_id", item.id);
-      const currentStock = (existingMovements ?? []).reduce((sum, movement) => sum + (movement.movement_type === "entree" ? Number(movement.quantity) : -Number(movement.quantity)), 0);
-      if (body.movementType === "sortie" && quantity > currentStock && !note) return Response.json({ error: "Une justification est obligatoire pour créer un stock négatif." }, { status: 400 });
-      const { error } = await db.from("stock_movements").insert({ project_id: project.id, stock_item_id: item.id, movement_type: body.movementType, quantity, person_id: person?.id ?? null, zone_id: zone?.id ?? null, storage_zone: body.movementType === "entree" ? storageZone : null, note, created_by: user.id });
+      if (!item || !["entree", "sortie", "transfert", "inventaire"].includes(movementType) || !Number.isFinite(quantity) || quantity < 0 || (movementType !== "inventaire" && quantity <= 0)) return Response.json({ error: "Mouvement invalide" }, { status: 400 });
+      if (movementType === "entree" && !destination) return Response.json({ error: "Sélectionnez un emplacement de destination." }, { status: 400 });
+      if (["sortie", "transfert", "inventaire"].includes(movementType) && !source) return Response.json({ error: "Sélectionnez un emplacement source." }, { status: 400 });
+      if (movementType === "transfert" && (!destination || source?.id === destination.id)) return Response.json({ error: "Sélectionnez deux emplacements différents." }, { status: 400 });
+      if (movementType === "sortie" && (!person || !zone)) return Response.json({ error: "Sélectionnez une personne et une zone d’affectation." }, { status: 400 });
+      const note = String(body.note ?? "").trim() || null;
+      const { data: existingMovements } = await db.from("stock_movements").select("movement_type,quantity,source_location_id,destination_location_id,inventory_delta").eq("project_id", project.id).eq("stock_item_id", item.id);
+      const currentAtSource = (existingMovements ?? []).reduce((sum, movement) => {
+        if (movement.movement_type === "entree" && movement.destination_location_id === source?.id) return sum + Number(movement.quantity);
+        if (movement.movement_type === "sortie" && movement.source_location_id === source?.id) return sum - Number(movement.quantity);
+        if (movement.movement_type === "transfert") return sum + (movement.destination_location_id === source?.id ? Number(movement.quantity) : 0) - (movement.source_location_id === source?.id ? Number(movement.quantity) : 0);
+        if (movement.movement_type === "inventaire" && movement.source_location_id === source?.id) return sum + Number(movement.inventory_delta ?? 0);
+        return sum;
+      }, 0);
+      if (["sortie", "transfert"].includes(movementType) && quantity > currentAtSource && !note) return Response.json({ error: "Une justification est obligatoire pour créer un stock négatif." }, { status: 400 });
+      const inventoryDelta = movementType === "inventaire" ? quantity - currentAtSource : null;
+      if (movementType === "inventaire" && (!note || inventoryDelta === 0)) return Response.json({ error: "L’inventaire doit corriger le stock et comporter un motif." }, { status: 400 });
+      const { error } = await db.from("stock_movements").insert({ project_id: project.id, stock_item_id: item.id, movement_type: movementType, quantity: movementType === "inventaire" ? Math.abs(inventoryDelta as number) : quantity, source_location_id: source?.id ?? null, destination_location_id: destination?.id ?? null, inventory_delta: inventoryDelta, counted_quantity: movementType === "inventaire" ? quantity : null, previous_quantity: movementType === "inventaire" ? currentAtSource : null, person_id: person?.id ?? null, zone_id: zone?.id ?? null, note, created_by: user.id });
       if (error) throw error;
     } else return Response.json({ error: "Type inconnu" }, { status: 400 });
 
