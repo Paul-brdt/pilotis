@@ -332,6 +332,7 @@ export default function Home() {
   const [accountError, setAccountError] = useState("");
   const [accountSaving, setAccountSaving] = useState(false);
   const [view, setView] = useState<View>("dashboard");
+  const [mobileMenuOpen,setMobileMenuOpen]=useState(false);
   const [openNavSections,setOpenNavSections]=useState({personnel:false,magasin:false,chantier:false});
   const [notice, setNotice] = useState("");
   const [selectedDate, setSelectedDate] = useState(() => new Date());
@@ -404,6 +405,15 @@ export default function Home() {
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [accountMenuOpen]);
+
+  useEffect(()=>{
+    if(!mobileMenuOpen)return;
+    const previousOverflow=document.body.style.overflow;
+    document.body.style.overflow="hidden";
+    const closeOnEscape=(event:KeyboardEvent)=>{if(event.key==="Escape")setMobileMenuOpen(false)};
+    document.addEventListener("keydown",closeOnEscape);
+    return()=>{document.body.style.overflow=previousOverflow;document.removeEventListener("keydown",closeOnEscape)};
+  },[mobileMenuOpen]);
 
   async function authenticate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -555,13 +565,15 @@ export default function Home() {
 
   return (
     <main className="app-shell">
-      <aside className="sidebar">
+      {mobileMenuOpen?<button type="button" className="mobile-menu-backdrop" aria-label="Fermer le menu" onClick={()=>setMobileMenuOpen(false)}/>:null}
+      <aside className={`sidebar${mobileMenuOpen?" mobile-open":""}`}>
         <div className="brand">
           <span className="brandmark">P</span>
           <div>
             <b>PILOTIS</b>
             <small>CHANTIER ÉLECTRIQUE</small>
           </div>
+          <button type="button" className="sidebar-mobile-close" aria-label="Fermer le menu" onClick={()=>setMobileMenuOpen(false)}>×</button>
         </div>
         <div className="project-switch">
           <span>CHANTIER ACTIF</span>
@@ -576,7 +588,7 @@ export default function Home() {
           {nav.slice(0, 1).map(([id, icon, label]) => (
             <button
               key={id}
-              onClick={() => setView(id)}
+              onClick={() => {setView(id);setMobileMenuOpen(false)}}
               className={view === id ? "active" : ""}
             >
               <i>{icon}</i>
@@ -585,20 +597,20 @@ export default function Home() {
           ))}
           <button type="button" className="nav-section-toggle" aria-expanded={openNavSections.personnel} onClick={()=>setOpenNavSections(current=>({...current,personnel:!current.personnel}))}><span>PERSONNEL</span><i>{openNavSections.personnel?"⌃":"⌄"}</i></button>
           {openNavSections.personnel&&personnelNav.map(([id, icon, label]) => (
-            <button key={id} onClick={() => setView(id)} className={view === id ? "active" : ""}><i>{icon}</i>{label}</button>
+            <button key={id} onClick={() => {setView(id);setMobileMenuOpen(false)}} className={view === id ? "active" : ""}><i>{icon}</i>{label}</button>
           ))}
           <button type="button" className="nav-section-toggle" aria-expanded={openNavSections.magasin} onClick={()=>setOpenNavSections(current=>({...current,magasin:!current.magasin}))}><span>MAGASIN</span><i>{openNavSections.magasin?"⌃":"⌄"}</i></button>
           {openNavSections.magasin&&magasinNav.map(([id, icon, label]) => (
-            <button key={id} onClick={() => setView(id)} className={view === id ? "active" : ""}><i>{icon}</i>{label}</button>
+            <button key={id} onClick={() => {setView(id);setMobileMenuOpen(false)}} className={view === id ? "active" : ""}><i>{icon}</i>{label}</button>
           ))}
           <button type="button" className="nav-section-toggle" aria-expanded={openNavSections.chantier} onClick={()=>setOpenNavSections(current=>({...current,chantier:!current.chantier}))}><span>CHANTIER</span><i>{openNavSections.chantier?"⌃":"⌄"}</i></button>
           {openNavSections.chantier&&nav.slice(1).map(([id, icon, label]) => (
-            <button key={id} onClick={() => setView(id)} className={view === id ? "active" : ""}><i>{icon}</i>{label}</button>
+            <button key={id} onClick={() => {setView(id);setMobileMenuOpen(false)}} className={view === id ? "active" : ""}><i>{icon}</i>{label}</button>
           ))}
         </nav>
         <div className="sidebar-bottom">
           <button
-            onClick={() => setView("settings")}
+            onClick={() => {setView("settings");setMobileMenuOpen(false)}}
             className={view === "settings" ? "active" : ""}
           >
             <i>⚙</i> Paramètres
@@ -664,7 +676,7 @@ export default function Home() {
 
       <section className="workspace">
         <header>
-          <button className="mobile-menu">☰</button>
+          <button type="button" className="mobile-menu" aria-label="Ouvrir le menu" aria-expanded={mobileMenuOpen} onClick={()=>setMobileMenuOpen(true)}>☰</button>
           <div>
             <span className="crumb">
               CHANTIERS / {projectIdentity?.code ?? "…"}
