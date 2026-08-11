@@ -2628,6 +2628,10 @@ td .avatar {
 .presence-actions { display:flex; align-items:center; gap:10px; }
 .presence-save-bar { display:flex; justify-content:flex-end; align-items:center; gap:16px; margin-top:14px; }
 .presence-save-bar span { color:var(--muted); font-size:9px; }
+.functional-stock-kpis { grid-template-columns:repeat(3,1fr); }
+.stock-filters select { min-width:150px; border:1px solid #d7dfdb; border-radius:4px; padding:9px 10px; background:#fff; color:#40534c; font-size:9px; }
+.add-stock-item { align-self:flex-start; margin:-7px 0 11px; }
+.stock-negative-warning { margin:0 0 12px; padding:10px; border-radius:4px; background:#fff2ed; color:#9e5039; font-size:9px; }
 .overtime-field { display:flex; flex-direction:column; gap:3px; }
 .overtime-field input { width:100%; }
 .overtime-field small { color:#9a6e25; }
