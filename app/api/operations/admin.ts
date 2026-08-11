@@ -202,13 +202,12 @@ export async function POST(request: Request) {
       const hours = Number(body.hours);
       const taskId = String(body.taskId ?? ""); const zoneId = String(body.zoneId ?? ""); const workDate = String(body.workDate ?? "");
       if (!personIds.length || !taskId || !zoneId || !/^\d{4}-\d{2}-\d{2}$/.test(workDate) || !Number.isFinite(hours) || hours <= 0 || hours > 24) return Response.json({ error: "Pointage invalide" }, { status: 400 });
-      const [{ data: task }, { data: zone }, { data: allocation }, { data: activePeople }] = await Promise.all([
+      const [{ data: task }, { data: zone }, { data: activePeople }] = await Promise.all([
         db.from("tasks").select("id").eq("id", taskId).eq("project_id", project.id).maybeSingle(),
         db.from("zones").select("id").eq("id", zoneId).eq("project_id", project.id).maybeSingle(),
-        db.from("zone_task_budget_allocations").select("id").eq("project_id", project.id).eq("task_id", taskId).eq("zone_id", zoneId).maybeSingle(),
         db.from("people").select("id").eq("project_id", project.id).eq("active", true).in("id", personIds),
       ]);
-      if (!task || !zone || !allocation || (activePeople?.length ?? 0) !== personIds.length) return Response.json({ error: "Une personne ou une allocation tâche/zone n’est plus disponible." }, { status: 400 });
+      if (!task || !zone || (activePeople?.length ?? 0) !== personIds.length) return Response.json({ error: "Une personne, une tâche ou une zone n’est plus disponible." }, { status: 400 });
       const { error } = await db.from("time_entries").insert(personIds.map(personId => ({ project_id: project.id, person_id: personId, task_id: taskId, zone_id: zoneId, work_date: workDate, hours, comment: String(body.comment || ""), created_by: user.id })));
       if (error) throw error;
     } else if (body.kind === "stock") {
