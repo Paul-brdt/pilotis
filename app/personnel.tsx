@@ -16,10 +16,11 @@ const minutes = (value: string) => { const [h, m] = value.split(":").map(Number)
 export function calculateAttendance(schedule: WorkSchedule | undefined, status: AttendanceStatus, arrival: string, departure: string) {
   if (!schedule?.is_working_day || status !== "present") return { scheduled: 0, regular: 0, overtime: 0 };
   const scheduled = Number(schedule.theoretical_hours);
-  if (!arrival || !departure) return { scheduled, regular: scheduled, overtime: 0 };
-  const late = Math.max(0, minutes(arrival) - minutes(shortTime(schedule.start_time)));
-  const early = Math.max(0, minutes(shortTime(schedule.end_time)) - minutes(departure));
-  const overtime = Math.max(0, minutes(departure) - minutes(shortTime(schedule.end_time))) / 60;
+  const effectiveArrival = arrival || shortTime(schedule.start_time);
+  const effectiveDeparture = departure || shortTime(schedule.end_time);
+  const late = Math.max(0, minutes(effectiveArrival) - minutes(shortTime(schedule.start_time)));
+  const early = Math.max(0, minutes(shortTime(schedule.end_time)) - minutes(effectiveDeparture));
+  const overtime = Math.max(0, minutes(effectiveDeparture) - minutes(shortTime(schedule.end_time))) / 60;
   return { scheduled, regular: Math.max(0, scheduled - (late + early) / 60), overtime };
 }
 
