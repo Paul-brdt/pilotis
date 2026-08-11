@@ -1,0 +1,7 @@
+node_modules
+.next
+.git
+.env*
+output
+tmp
+scripts/render-sample-timesheet.ts
