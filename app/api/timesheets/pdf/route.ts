@@ -1,7 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont } from "pdf-lib";
 import { supabasePublishableKey, supabaseUrl } from "@/lib/supabase";
-import type { TimesheetSnapshot } from "@/lib/timesheet";
+import { isoWeekNumber, type TimesheetSnapshot } from "@/lib/timesheet";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,7 +13,30 @@ const grid = rgb(0.68, 0.71, 0.69);
 const ink = rgb(0.1, 0.12, 0.11);
 
 function safeText(value: unknown) {
-  return String(value ?? "").replace(/[\r\n\t]+/g, " ").trim();
+  return String(value ?? "")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/[’‘]/g, "'")
+    .replace(/[–—]/g, "-")
+    .replace(/…/g, "...")
+    .replace(/[^\x20-\x7E\xA0-\xFF]/g, "?")
+    .trim();
+}
+
+async function rebuildSnapshot(db: SupabaseClient, project: { id: string; name: string; code: string; location: string | null }, agencyId: string, weekStart: string) {
+  const monday = new Date(`${weekStart}T12:00:00Z`);
+  const days = Array.from({ length: 7 }, (_, index) => { const date = new Date(monday); date.setUTCDate(monday.getUTCDate() + index); return { date: date.toISOString().slice(0, 10), label: date.toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", timeZone: "UTC" }).toUpperCase() }; });
+  const weekEnd = days[6].date;
+  const [{ data: agency }, { data: people }, { data: entries }] = await Promise.all([
+    db.from("agencies").select("name,code,address,postal_code,city").eq("id", agencyId).eq("project_id", project.id).maybeSingle(),
+    db.from("people").select("id,full_name,qualification,coefficient").eq("project_id", project.id).eq("agency_id", agencyId).eq("contract_type", "interimaire").order("full_name"),
+    db.from("time_entries").select("person_id,work_date,hours").eq("project_id", project.id).gte("work_date", weekStart).lte("work_date", weekEnd),
+  ]);
+  if (!agency) return null;
+  const agencyRow = agency as { name: string; code: string; address: string | null; postal_code: string | null; city: string | null };
+  const personRows = (people ?? []) as Array<{ id: string; full_name: string; qualification: string | null; coefficient: string | null }>;
+  const entryRows = (entries ?? []) as Array<{ person_id: string; work_date: string; hours: number | string }>;
+  const workers = personRows.map((person) => { const hours = days.map((day) => entryRows.filter((entry) => entry.person_id === person.id && entry.work_date === day.date).reduce((sum, entry) => sum + Number(entry.hours), 0)); return { id: person.id, name: person.full_name, qualification: person.qualification, coefficient: person.coefficient ? Number(person.coefficient) : null, hours, total: hours.reduce((sum, value) => sum + value, 0), meals: hours.filter((value) => value > 5).length }; });
+  return { version: 1, weekNumber: isoWeekNumber(monday), weekStart, weekEnd, agency: { name: agencyRow.name, code: agencyRow.code, address: agencyRow.address, postalCode: agencyRow.postal_code, city: agencyRow.city }, project: { name: project.name, code: project.code, location: project.location }, days, workers, totalHours: workers.reduce((sum, worker) => sum + worker.total, 0), totalMeals: workers.reduce((sum, worker) => sum + worker.meals, 0) } satisfies TimesheetSnapshot;
 }
 
 function drawCentered(page: PDFPage, font: PDFFont, text: string, x: number, y: number, width: number, size: number) {
@@ -122,24 +145,28 @@ export async function GET(request: Request) {
     const db = createClient(supabaseUrl, supabasePublishableKey, { global: { headers: { Authorization: authorization } } });
     const { data: { user } } = await db.auth.getUser();
     if (!user) return Response.json({ error: "Authentification requise" }, { status: 401 });
-    const { data: project } = await db.from("projects").select("id").eq("code", "24-018").single();
+    const { data: project } = await db.from("projects").select("id,name,code,location").eq("code", "24-018").single();
     if (!project) return Response.json({ error: "Chantier introuvable" }, { status: 404 });
     const { data: sheet, error } = await db
       .from("weekly_timesheets")
-      .select("status,snapshot")
+      .select("id,status,snapshot")
       .eq("project_id", project.id)
       .eq("agency_id", agencyId)
       .eq("week_start", weekStart)
       .maybeSingle();
     if (error) throw error;
-    if (!sheet?.snapshot) return Response.json({ error: "Générez d'abord la feuille pour créer son PDF." }, { status: 404 });
+    if (!sheet) return Response.json({ error: "Générez d'abord la feuille pour créer son PDF." }, { status: 404 });
+
+    const snapshot = sheet.snapshot as TimesheetSnapshot | null ?? await rebuildSnapshot(db, project, agencyId, weekStart);
+    if (!snapshot) return Response.json({ error: "Les données de la feuille sont indisponibles." }, { status: 404 });
+    if (!sheet.snapshot) await db.from("weekly_timesheets").update({ snapshot, updated_at: new Date().toISOString() }).eq("id", sheet.id);
 
     const status = sheet.status === "bureau_validated" ? "Validée par le bureau" : sheet.status === "conducteur_validated" ? "Validée par le conducteur" : "Générée";
-    const bytes = await buildTimesheetPdf(sheet.snapshot as TimesheetSnapshot, status);
+    const bytes = await buildTimesheetPdf(snapshot, status);
     return new Response(Buffer.from(bytes), {
       headers: {
         "content-type": "application/pdf",
-        "content-disposition": `attachment; filename="feuille-${safeText((sheet.snapshot as TimesheetSnapshot).agency.code)}-S${(sheet.snapshot as TimesheetSnapshot).weekNumber}.pdf"`,
+        "content-disposition": `attachment; filename="feuille-${safeText(snapshot.agency.code)}-S${snapshot.weekNumber}.pdf"`,
         "cache-control": "private, no-store",
       },
     });
