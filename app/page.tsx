@@ -307,6 +307,10 @@ export default function Home() {
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authError, setAuthError] = useState("");
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [accountError, setAccountError] = useState("");
+  const [accountSaving, setAccountSaving] = useState(false);
   const [view, setView] = useState<View>("dashboard");
   const [notice, setNotice] = useState("");
   const [selectedDate, setSelectedDate] = useState(() => new Date());
@@ -363,6 +367,24 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, [accessToken]);
 
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+    const closeMenu = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && !target.closest("[data-account-menu]"))
+        setAccountMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAccountMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", closeMenu);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeMenu);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [accountMenuOpen]);
+
   async function authenticate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAuthError("");
@@ -386,6 +408,57 @@ export default function Home() {
       password,
     });
     if (result.error) setAuthError("Identifiant ou mot de passe incorrect.");
+  }
+
+  async function signOut() {
+    setAccountMenuOpen(false);
+    const supabase = createSupabaseBrowserClient();
+    const { error } = await supabase.auth.signOut({ scope: "local" });
+    if (error) toast("La déconnexion n’a pas pu être terminée.");
+  }
+
+  async function changePassword(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAccountError("");
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const currentPassword = String(form.get("currentPassword") ?? "");
+    const newPassword = String(form.get("newPassword") ?? "");
+    const passwordConfirmation = String(form.get("passwordConfirmation") ?? "");
+
+    if (newPassword.length < 8) {
+      setAccountError("Le nouveau mot de passe doit contenir au moins 8 caractères.");
+      return;
+    }
+    if (newPassword !== passwordConfirmation) {
+      setAccountError("La confirmation ne correspond pas au nouveau mot de passe.");
+      return;
+    }
+    if (currentPassword === newPassword) {
+      setAccountError("Choisissez un mot de passe différent de l’actuel.");
+      return;
+    }
+
+    setAccountSaving(true);
+    const supabase = createSupabaseBrowserClient();
+    const verification = await supabase.auth.signInWithPassword({
+      email: "admin@pilotis.internal",
+      password: currentPassword,
+    });
+    if (verification.error) {
+      setAccountError("Le mot de passe actuel est incorrect.");
+      setAccountSaving(false);
+      return;
+    }
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setAccountSaving(false);
+    if (error) {
+      setAccountError(error.message);
+      return;
+    }
+    formElement.reset();
+    setPasswordDialogOpen(false);
+    toast("Mot de passe modifié avec succès.");
   }
 
   if (!authReady)
@@ -498,7 +571,7 @@ export default function Home() {
           >
             <i>⚙</i> Paramètres
           </button>
-          <div className="user">
+          <div className="user" data-account-menu>
             <span>
               {(currentProfile?.full_name ?? "Utilisateur")
                 .split(/\s+/)
@@ -511,7 +584,48 @@ export default function Home() {
               <b>{currentProfile?.full_name ?? authEmail}</b>
               <small>{roleLabel(currentProfile?.role)}</small>
             </div>
-            <em>⋮</em>
+            <button
+              className="account-menu-trigger"
+              type="button"
+              aria-label="Ouvrir le menu du compte"
+              aria-expanded={accountMenuOpen}
+              onClick={() => setAccountMenuOpen((open) => !open)}
+            >
+              ⋮
+            </button>
+            {accountMenuOpen && (
+              <div className="account-menu" role="menu">
+                <div className="account-menu-profile">
+                  <b>{currentProfile?.full_name ?? "Utilisateur"}</b>
+                  <small>Identifiant : admin</small>
+                  <span>{roleLabel(currentProfile?.role)}</span>
+                </div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setAccountMenuOpen(false);
+                    setView("settings");
+                  }}
+                >
+                  <i>⚙</i> Paramètres du compte
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setAccountMenuOpen(false);
+                    setAccountError("");
+                    setPasswordDialogOpen(true);
+                  }}
+                >
+                  <i>⌘</i> Changer le mot de passe
+                </button>
+                <button className="account-signout" type="button" role="menuitem" onClick={signOut}>
+                  <i>↪</i> Se déconnecter
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </aside>
@@ -584,6 +698,50 @@ export default function Home() {
           />
         )}
       </section>
+      {passwordDialogOpen && (
+        <div className="account-dialog-backdrop" role="presentation">
+          <form className="account-dialog" onSubmit={changePassword}>
+            <div className="account-dialog-head">
+              <div>
+                <small>SÉCURITÉ DU COMPTE</small>
+                <h2>Changer le mot de passe</h2>
+              </div>
+              <button
+                type="button"
+                aria-label="Fermer"
+                onClick={() => {
+                  setPasswordDialogOpen(false);
+                  setAccountError("");
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <p>Utilisez au moins 8 caractères. Une phrase de passe unique est recommandée.</p>
+            <label>
+              Mot de passe actuel
+              <input name="currentPassword" type="password" autoComplete="current-password" required />
+            </label>
+            <label>
+              Nouveau mot de passe
+              <input name="newPassword" type="password" autoComplete="new-password" minLength={8} required />
+            </label>
+            <label>
+              Confirmer le nouveau mot de passe
+              <input name="passwordConfirmation" type="password" autoComplete="new-password" minLength={8} required />
+            </label>
+            {accountError && <div className="auth-error">{accountError}</div>}
+            <div className="account-dialog-actions">
+              <button type="button" onClick={() => setPasswordDialogOpen(false)} disabled={accountSaving}>
+                Annuler
+              </button>
+              <button className="primary" type="submit" disabled={accountSaving}>
+                {accountSaving ? "Modification…" : "Modifier le mot de passe"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
       {notice && <div className="toast">✓ {notice}</div>}
     </main>
   );
