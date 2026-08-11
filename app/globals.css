@@ -2658,6 +2658,9 @@ td .avatar {
 
 /* Personnel, présence et horaires */
 .nav-section-label { display:block; padding:16px 12px 5px; color:#80908a; font-size:8px; font-weight:700; letter-spacing:1.2px; }
+.sidebar nav .nav-section-toggle { display:flex; align-items:center; justify-content:space-between; margin-top:8px; padding:8px 12px 4px; border-radius:4px; color:#80908a; font-size:8px; font-weight:700; letter-spacing:1.2px; }
+.sidebar nav .nav-section-toggle i { width:auto; font-size:12px; }
+.sidebar nav .nav-section-toggle:hover { background:#234b41; color:#d7e1de; }
 .assigned-hours small { display:block; margin-top:4px; font-size:7px; font-style:normal; white-space:nowrap; }
 .assigned-hours small.under { color:#a87924; }
 .assigned-hours small.over { color:#a34f39; }
@@ -2708,6 +2711,15 @@ td .avatar {
 .stock-detail-history div { display:grid; grid-template-columns:90px 1fr 90px; gap:10px; padding:9px 0; border-bottom:1px solid #edf0ee; font-size:9px; }
 .stock-detail-history strong { text-align:right; }
 .move-transfert { color:#3c6685; }.move-inventaire { color:#8b692a; }
+.tool-stock-panel { margin-top:15px; }
+.extra-works-panel table { min-width:900px; }
+.extra-works-panel tbody tr { cursor:pointer; }
+.extra-works-panel tbody tr:hover { background:#f6faf8; }
+.extra-work-text { max-width:270px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.extra-work-modal { width:min(680px,calc(100vw - 32px)); }
+.extra-work-modal textarea { min-height:90px; resize:vertical; }
+.extra-work-modal label small { color:var(--muted); font-size:8px; font-weight:400; }
+.empty-table { padding:28px!important; color:var(--muted); text-align:center!important; }
 .magasin-tabs { display:flex; gap:4px; padding:4px; margin-bottom:16px; border-radius:7px; background:#e9efec; }
 .magasin-tabs button { flex:1; border:0; border-radius:5px; padding:9px 10px; background:transparent; color:#667873; font-size:9px; font-weight:700; }
 .magasin-tabs button.active { background:#fff; color:#286b57; box-shadow:0 1px 4px #173f351c; }
