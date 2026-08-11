@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { isoWeekNumber, type TimesheetSnapshot } from "@/lib/timesheet";
 import { MorningPresence, WorkScheduleSettings } from "@/app/personnel";
-import { StockManager } from "@/app/stock";
+import { MagasinManager } from "@/app/magasin";
 
 type View =
   | "dashboard"
@@ -14,7 +14,7 @@ type View =
   | "interim"
   | "taches"
   | "zones"
-  | "stock"
+  | "magasin"
   | "cables"
   | "settings";
 
@@ -276,7 +276,7 @@ const nav = [
   ["dashboard", "⌂", "Vue d’ensemble"],
   ["taches", "▤", "Tâches & budgets"],
   ["zones", "⌖", "Zones de travail"],
-  ["stock", "▦", "Suivi de stock"],
+  ["magasin", "▦", "Magasin"],
   ["cables", "⌁", "Carnet de câbles"],
 ] as [View, string, string][];
 
@@ -662,13 +662,15 @@ export default function Home() {
               <button aria-label="Jour précédent" onClick={() => moveDate(-1)}>
                 ‹
               </button>
-              <button
-                className="date"
-                title="Revenir à aujourd’hui"
-                onClick={() => setSelectedDate(new Date())}
-              >
-                <b>{dateLabel}</b>
-              </button>
+              <input
+                className="date-picker"
+                type="date"
+                aria-label="Sélectionner la date de travail"
+                value={workDate}
+                onChange={(event) => {
+                  if (event.target.value) setSelectedDate(new Date(`${event.target.value}T12:00:00`));
+                }}
+              />
               <button aria-label="Jour suivant" onClick={() => moveDate(1)}>
                 ›
               </button>
@@ -702,7 +704,7 @@ export default function Home() {
         {view === "zones" && (
           <Zones accessToken={accessToken} toast={toast} />
         )}
-        {view === "stock" && <StockManager toast={toast} accessToken={accessToken} />}
+        {view === "magasin" && <MagasinManager toast={toast} accessToken={accessToken} />}
         {view === "cables" && <Cables toast={toast} />}
         {view === "settings" && (
           <Settings
@@ -778,22 +780,23 @@ function Dashboard({
     person_id: string; task_id: string; zone_id: string | null; work_date: string;
     hours: number | string; created_at: string;
   };
-  type DashboardAudit = {
-    id: number; action: string; entity_type: string; payload: Record<string, unknown>; created_at: string;
-  };
   type DashboardAttendance = { person_id: string; work_date: string; status: string; regular_hours: number | string; automatic_overtime_hours: number | string; manual_overtime_hours: number | string | null };
   type DashboardSchedule = { weekday: number; is_working_day: boolean; theoretical_hours: number | string };
+  type DashboardEquipment = { id:string; internal_reference:string; description:string; vic_due_date:string|null; rental_planned_end_date:string|null; rental_actual_end_date:string|null; status:string; active:boolean };
 
   const [period, setPeriod] = useState<Period>("week");
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState(workDate);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [peopleRows, setPeopleRows] = useState<PersonRow[]>([]);
   const [taskRows, setTaskRows] = useState<DashboardTask[]>([]);
   const [zoneRows, setZoneRows] = useState<DashboardZone[]>([]);
   const [entries, setEntries] = useState<DashboardEntry[]>([]);
-  const [audits, setAudits] = useState<DashboardAudit[]>([]);
   const [attendanceRows, setAttendanceRows] = useState<DashboardAttendance[]>([]);
   const [scheduleRows, setScheduleRows] = useState<DashboardSchedule[]>([]);
+  const [equipmentRows, setEquipmentRows] = useState<DashboardEquipment[]>([]);
+  const [vicWarningDays, setVicWarningDays] = useState(30);
 
   const dateRange = useMemo(() => {
     const anchor = new Date(`${workDate}T12:00:00`);
@@ -807,11 +810,13 @@ function Dashboard({
       start.setDate(1);
       end.setMonth(start.getMonth() + 1, 0);
     } else if (period === "all") {
-      start.setFullYear(2000, 0, 1);
+      if (customStart) start.setTime(new Date(`${customStart}T12:00:00`).getTime());
+      else start.setFullYear(2000, 0, 1);
+      end.setTime(new Date(`${customEnd || workDate}T12:00:00`).getTime());
     }
     const iso = (date: Date) => date.toISOString().slice(0, 10);
     return { start: iso(start), end: iso(end) };
-  }, [period, workDate]);
+  }, [period, workDate, customStart, customEnd]);
 
   useEffect(() => {
     let active = true;
@@ -820,12 +825,12 @@ function Dashboard({
       setError("");
       const db = createSupabaseBrowserClient();
       const { data: project, error: projectError } = await db
-        .from("projects").select("id").eq("code", "24-018").single();
+        .from("projects").select("id,vic_warning_days").eq("code", "24-018").single();
       if (!project || projectError) {
         if (active) { setError("Le chantier n’a pas pu être chargé."); setLoading(false); }
         return;
       }
-      const [personsResult, tasksResult, zonesResult, entriesResult, auditsResult, attendanceResult, schedulesResult] = await Promise.all([
+      const [personsResult, tasksResult, zonesResult, entriesResult, attendanceResult, schedulesResult, equipmentResult] = await Promise.all([
         db.from("people")
           .select("id,full_name,qualification,contract_type,coefficient,active,agency_id,agencies(name)")
           .eq("project_id", project.id).eq("active", true).order("full_name"),
@@ -836,10 +841,9 @@ function Dashboard({
         db.from("time_entries")
           .select("person_id,task_id,zone_id,work_date,hours,created_at")
           .eq("project_id", project.id).order("created_at", { ascending: false }),
-        db.from("audit_events").select("id,action,entity_type,payload,created_at")
-          .eq("project_id", project.id).order("created_at", { ascending: false }).limit(8),
-        db.from("daily_attendance").select("person_id,work_date,status,regular_hours,automatic_overtime_hours,manual_overtime_hours").eq("project_id", project.id).gte("work_date", dateRange.start).lte("work_date", dateRange.end),
+        db.from("daily_attendance").select("person_id,work_date,status,regular_hours,automatic_overtime_hours,manual_overtime_hours").eq("project_id", project.id).gte("work_date", dateRange.start < workDate ? dateRange.start : workDate).lte("work_date", dateRange.end > workDate ? dateRange.end : workDate),
         db.from("project_work_schedules").select("weekday,is_working_day,theoretical_hours").eq("project_id", project.id),
+        db.from("equipment_assets").select("id,internal_reference,description,vic_due_date,rental_planned_end_date,rental_actual_end_date,status,active").eq("project_id",project.id).eq("active",true),
       ]);
       const firstError = personsResult.error || tasksResult.error || zonesResult.error || entriesResult.error;
       if (!active) return;
@@ -848,14 +852,15 @@ function Dashboard({
       setTaskRows((tasksResult.data || []) as DashboardTask[]);
       setZoneRows((zonesResult.data || []) as DashboardZone[]);
       setEntries((entriesResult.data || []) as DashboardEntry[]);
-      setAudits((auditsResult.data || []) as DashboardAudit[]);
       setAttendanceRows((attendanceResult.data || []) as DashboardAttendance[]);
       setScheduleRows((schedulesResult.data || []) as DashboardSchedule[]);
+      setEquipmentRows((equipmentResult.data || []) as DashboardEquipment[]);
+      setVicWarningDays(Number(project.vic_warning_days || 30));
       setLoading(false);
     }
     loadDashboard();
     return () => { active = false; };
-  }, [dateRange.start, dateRange.end]);
+  }, [dateRange.start, dateRange.end, workDate]);
 
   const hours = (rows: DashboardEntry[]) => rows.reduce((sum, row) => sum + Number(row.hours || 0), 0);
   const periodEntries = entries.filter((entry) => entry.work_date >= dateRange.start && entry.work_date <= dateRange.end);
@@ -869,7 +874,7 @@ function Dashboard({
   const internalCount = peopleRows.filter((person) => person.contract_type === "interne").length;
   const interimCount = peopleRows.length - internalCount;
   const periodDays = period === "day" ? 1 : Math.max(1, Math.round((new Date(`${dateRange.end}T12:00:00`).getTime() - new Date(`${dateRange.start}T12:00:00`).getTime()) / 86400000) + 1);
-  const expectedHours = period === "all" ? 0 : Array.from({ length: periodDays }, (_, i) => {
+  const expectedHours = Array.from({ length: periodDays }, (_, i) => {
     const date = new Date(`${dateRange.start}T12:00:00`); date.setDate(date.getDate() + i);
     const schedule = scheduleRows.find((row) => row.weekday === date.getDay());
     return schedule?.is_working_day ? Number(schedule.theoretical_hours) * peopleRows.length : 0;
@@ -890,22 +895,24 @@ function Dashboard({
   })).sort((a, b) => b.hours - a.hours);
 
   const alerts = [
-    ...(missingPeople.length ? [{ tone: "gold", title: `${missingPeople.length} présence${missingPeople.length > 1 ? "s" : ""} à renseigner aujourd’hui`, detail: missingPeople.slice(0, 3).map((p) => p.full_name).join(", "), view: "presence" as View }] : []),
+    ...(missingPeople.length ? [{ tone: "gold", title: `${missingPeople.length} présence${missingPeople.length > 1 ? "s" : ""} à renseigner le ${new Date(`${workDate}T12:00:00`).toLocaleDateString("fr-FR")}`, detail: missingPeople.slice(0, 3).map((p) => p.full_name).join(", "), view: "presence" as View }] : []),
     ...taskStats.filter((task) => task.percent >= 100).map((task) => ({ tone: "red", title: `Budget dépassé · ${task.code}`, detail: `${task.done.toLocaleString("fr-FR")} h sur ${task.budget.toLocaleString("fr-FR")} h`, view: "taches" as View })),
     ...taskStats.filter((task) => task.percent >= 80 && task.percent < 100).map((task) => ({ tone: "gold", title: `Budget à surveiller · ${task.code}`, detail: `${task.percent}% consommé`, view: "taches" as View })),
     ...zoneStats.filter((zone) => zone.physical === 0 && zone.hours > 0).map((zone) => ({ tone: "blue", title: `Avancement à renseigner · ${zone.code}`, detail: `${zone.hours.toLocaleString("fr-FR")} h déjà affectées`, view: "zones" as View })),
+    ...equipmentRows.flatMap((asset) => {
+      const rows: Array<{tone:string;title:string;detail:string;view:View}> = [];
+      const remaining = (date:string|null) => date === null ? null : Math.ceil((new Date(`${date}T12:00:00`).getTime() - Date.now()) / 86400000);
+      const vicDays = remaining(asset.vic_due_date);
+      if (vicDays !== null && vicDays < 0) rows.push({ tone:"red", title:`VIC dépassée · ${asset.internal_reference}`, detail:asset.description, view:"magasin" });
+      else if (vicDays !== null && vicDays <= vicWarningDays) rows.push({ tone:"gold", title:`VIC à programmer · ${asset.internal_reference}`, detail:`${vicDays} jour(s) avant échéance`, view:"magasin" });
+      const rentalDays = asset.rental_actual_end_date ? null : remaining(asset.rental_planned_end_date);
+      if (rentalDays !== null && rentalDays <= vicWarningDays) rows.push({ tone:rentalDays < 0 ? "red" : "blue", title:`Location ${rentalDays < 0 ? "échue" : "à terminer"} · ${asset.internal_reference}`, detail:asset.description, view:"magasin" });
+      if (["maintenance","hors_service"].includes(asset.status)) rows.push({ tone:asset.status === "hors_service" ? "red" : "gold", title:`${asset.status === "hors_service" ? "Hors service" : "Maintenance"} · ${asset.internal_reference}`, detail:asset.description, view:"magasin" });
+      return rows;
+    }),
   ].slice(0, 5);
 
   const periodLabels: Record<Period, string> = { day: "Jour", week: "Semaine", month: "Mois", all: "Cumul" };
-  const auditLabel = (audit: DashboardAudit) => {
-    const labels: Record<string, string> = {
-      time_entry_created: "Pointage enregistré", time_entry_updated: "Pointage modifié",
-      weekly_timesheet_generated: "Feuille intérim générée", weekly_timesheet_validated: "Feuille intérim validée",
-      task_updated: "Tâche mise à jour", zone_updated: "Zone mise à jour",
-    };
-    return labels[audit.action] || audit.action.replaceAll("_", " ");
-  };
-
   return (
     <div className="content">
       <section className="intro">
@@ -915,8 +922,18 @@ function Dashboard({
         </div>
         <div className="dashboard-period" aria-label="Période du tableau de bord">
           {(Object.keys(periodLabels) as Period[]).map((key) => (
-            <button className={period === key ? "active" : ""} key={key} onClick={() => setPeriod(key)}>{periodLabels[key]}</button>
+            <button className={period === key ? "active" : ""} key={key} onClick={() => {
+              if (key === "all" && !customStart && entries.length) {
+                setCustomStart(entries.reduce((earliest, entry) => entry.work_date < earliest ? entry.work_date : earliest, entries[0].work_date));
+              }
+              if (key === "all" && !customEnd) setCustomEnd(workDate);
+              setPeriod(key);
+            }}>{periodLabels[key]}</button>
           ))}
+          {period === "all" ? <div className="dashboard-custom-range">
+            <label>Du<input type="date" value={customStart} max={customEnd || workDate} onChange={(event) => setCustomStart(event.target.value)} /></label>
+            <label>Au<input type="date" value={customEnd} min={customStart} onChange={(event) => setCustomEnd(event.target.value)} /></label>
+          </div> : null}
         </div>
       </section>
       {error && <div className="dashboard-error">{error}</div>}
@@ -924,7 +941,7 @@ function Dashboard({
         <Kpi
           label="POINTAGE DE LA PÉRIODE"
           value={loading ? "…" : `${totalHours.toLocaleString("fr-FR")} h`}
-          detail={expectedHours ? `sur ${expectedHours.toLocaleString("fr-FR")} h théoriques` : "Cumul depuis le démarrage"}
+          detail={expectedHours ? `sur ${expectedHours.toLocaleString("fr-FR")} h théoriques` : "Aucune heure théorique sur la période"}
           tone="green"
           ring={Math.min(completion, 100)}
         />
@@ -987,30 +1004,19 @@ function Dashboard({
             );
           })}
         </div>
-        <div className="panel activity">
+        <div className="panel dashboard-alerts dashboard-alerts-inline">
           <div className="panel-title">
             <div>
-              <span>AUJOURD’HUI</span>
-              <h3>Activité du chantier</h3>
+              <span>POINTS D’ATTENTION</span>
+              <h3>Alertes actionnables</h3>
             </div>
-            <button>•••</button>
+            <b>{alerts.length}</b>
           </div>
-          <div className="activity-summary">
-            <div>
-              <b>{todayHours.toLocaleString("fr-FR")} h</b>
-              <small>saisies aujourd’hui</small>
-            </div>
-            <div>
-              <b>{presentIds.size}</b>
-              <small>personnes pointées</small>
-            </div>
-          </div>
-          <div className="timeline">
-            {audits.length ? audits.slice(0, 5).map((audit) => (
-              <Event key={audit.id} time={new Date(audit.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
-                color="green" title={auditLabel(audit)} text={new Date(audit.created_at).toLocaleDateString("fr-FR")} />
-            )) : <p className="dashboard-empty">Aucune activité récente.</p>}
-          </div>
+          {alerts.length ? alerts.map((alert, index) => (
+            <button key={`${alert.title}-${index}`} onClick={() => setView(alert.view)}>
+              <i className={alert.tone}>!</i><span><b>{alert.title}</b><small>{alert.detail}</small></span><em>›</em>
+            </button>
+          )) : <p className="dashboard-empty">Aucune alerte sur la période sélectionnée.</p>}
         </div>
       </section>
       <section className="bottom-grid">
@@ -1058,14 +1064,6 @@ function Dashboard({
             <em>›</em>
           </button>
         </div>
-      </section>
-      <section className="panel dashboard-alerts">
-        <div className="panel-title"><div><span>POINTS D’ATTENTION</span><h3>Alertes actionnables</h3></div><b>{alerts.length}</b></div>
-        {alerts.length ? alerts.map((alert, index) => (
-          <button key={`${alert.title}-${index}`} onClick={() => setView(alert.view)}>
-            <i className={alert.tone}>!</i><span><b>{alert.title}</b><small>{alert.detail}</small></span><em>›</em>
-          </button>
-        )) : <p className="dashboard-empty">Aucune alerte sur la période sélectionnée.</p>}
       </section>
     </div>
   );
@@ -3927,28 +3925,6 @@ function Kpi({ label, value, detail, tone, ring, progress, avatars }: KpiProps) 
           <i>+9</i>
         </div>
       )}
-    </div>
-  );
-}
-function Event({
-  time,
-  color,
-  title,
-  text,
-}: {
-  time: string;
-  color: string;
-  title: string;
-  text: string;
-}) {
-  return (
-    <div className="event">
-      <time>{time}</time>
-      <i className={color} />
-      <div>
-        <b>{title}</b>
-        <small>{text}</small>
-      </div>
     </div>
   );
 }
