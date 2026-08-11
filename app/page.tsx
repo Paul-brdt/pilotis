@@ -6,6 +6,7 @@ import { isoWeekNumber, type TimesheetSnapshot } from "@/lib/timesheet";
 import { MorningPresence, WorkScheduleSettings } from "@/app/personnel";
 import { MagasinManager } from "@/app/magasin";
 import { StockManager } from "@/app/stock";
+import { ExtraWorksManager } from "@/app/extra-works";
 
 type View =
   | "dashboard"
@@ -20,6 +21,7 @@ type View =
   | "outillage"
   | "acces"
   | "cables"
+  | "travaux-supplementaires"
   | "settings";
 
 const people = [
@@ -288,6 +290,7 @@ const nav = [
   ["taches", "▤", "Tâches & budgets"],
   ["zones", "⌖", "Zones de travail"],
   ["cables", "⌁", "Carnet de câbles"],
+  ["travaux-supplementaires", "＋", "Travaux supplémentaires"],
 ] as [View, string, string][];
 
 type CurrentProfile = {
@@ -329,6 +332,7 @@ export default function Home() {
   const [accountError, setAccountError] = useState("");
   const [accountSaving, setAccountSaving] = useState(false);
   const [view, setView] = useState<View>("dashboard");
+  const [openNavSections,setOpenNavSections]=useState({personnel:true,magasin:true,chantier:true});
   const [notice, setNotice] = useState("");
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(
@@ -579,16 +583,16 @@ export default function Home() {
               {label}
             </button>
           ))}
-          <span className="nav-section-label">PERSONNEL</span>
-          {personnelNav.map(([id, icon, label]) => (
+          <button type="button" className="nav-section-toggle" aria-expanded={openNavSections.personnel} onClick={()=>setOpenNavSections(current=>({...current,personnel:!current.personnel}))}><span>PERSONNEL</span><i>{openNavSections.personnel?"⌃":"⌄"}</i></button>
+          {openNavSections.personnel&&personnelNav.map(([id, icon, label]) => (
             <button key={id} onClick={() => setView(id)} className={view === id ? "active" : ""}><i>{icon}</i>{label}</button>
           ))}
-          <span className="nav-section-label">MAGASIN</span>
-          {magasinNav.map(([id, icon, label]) => (
+          <button type="button" className="nav-section-toggle" aria-expanded={openNavSections.magasin} onClick={()=>setOpenNavSections(current=>({...current,magasin:!current.magasin}))}><span>MAGASIN</span><i>{openNavSections.magasin?"⌃":"⌄"}</i></button>
+          {openNavSections.magasin&&magasinNav.map(([id, icon, label]) => (
             <button key={id} onClick={() => setView(id)} className={view === id ? "active" : ""}><i>{icon}</i>{label}</button>
           ))}
-          <span className="nav-section-label">CHANTIER</span>
-          {nav.slice(1).map(([id, icon, label]) => (
+          <button type="button" className="nav-section-toggle" aria-expanded={openNavSections.chantier} onClick={()=>setOpenNavSections(current=>({...current,chantier:!current.chantier}))}><span>CHANTIER</span><i>{openNavSections.chantier?"⌃":"⌄"}</i></button>
+          {openNavSections.chantier&&nav.slice(1).map(([id, icon, label]) => (
             <button key={id} onClick={() => setView(id)} className={view === id ? "active" : ""}><i>{icon}</i>{label}</button>
           ))}
         </nav>
@@ -722,6 +726,7 @@ export default function Home() {
         {view === "engins" && <MagasinManager section="engin" toast={toast} accessToken={accessToken} />}
         {view === "outillage" && <MagasinManager section="outillage" toast={toast} accessToken={accessToken} />}
         {view === "acces" && <MagasinManager section="acces" toast={toast} accessToken={accessToken} />}
+        {view === "travaux-supplementaires" && <ExtraWorksManager toast={toast} accessToken={accessToken} />}
         {view === "cables" && <Cables toast={toast} />}
         {view === "settings" && (
           <Settings
