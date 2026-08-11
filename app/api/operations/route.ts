@@ -251,7 +251,7 @@ export async function POST(request: Request) {
           locationId ? db.from("stock_locations").select("id").eq("project_id",project.id).eq("id",locationId).eq("active",true).maybeSingle() : Promise.resolve({data:null}),
           zoneId ? db.from("zones").select("id").eq("project_id",project.id).eq("id",zoneId).maybeSingle() : Promise.resolve({data:null}),
         ]);
-        if (movementType === "affectation" && asset.category === "outillage" && (!person || !zone)) return Response.json({ error: "Sélectionnez une personne et une zone pour la sortie de l’outil." }, { status: 400 });
+        if (movementType === "affectation" && asset.category === "outillage" && !person) return Response.json({ error: "Sélectionnez une personne pour la sortie de l’outil." }, { status: 400 });
         if (["retour","transfert","remise_service"].includes(movementType) && !location) return Response.json({ error: "Sélectionnez un emplacement magasin." }, { status: 400 });
         const { error: movementError } = await db.from("equipment_movements").insert({ project_id: project.id, asset_id: assetId, movement_type: movementType, person_id: person?.id ?? null, stock_location_id: location?.id ?? null, zone_id: zone?.id ?? null, note: String(body.note ?? "").trim() || null, created_by: user.id });
         if (movementError) throw movementError;
