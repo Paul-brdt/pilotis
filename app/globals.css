@@ -375,6 +375,30 @@
   gap: 14px;
   margin-bottom: 15px;
 }
+.stock-summary-grid {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:14px;
+  margin-bottom:15px;
+}
+.stock-summary-card {
+  display:flex;
+  min-width:0;
+  min-height:112px;
+  flex-direction:column;
+  justify-content:center;
+  padding:17px 18px;
+  border:1px solid var(--line);
+  border-top:3px solid;
+  border-radius:6px;
+  background:#fff;
+}
+.stock-summary-card.green { border-top-color:#3a856e; }
+.stock-summary-card.red { border-top-color:#ad634d; }
+.stock-summary-card.gold { border-top-color:#c69a48; }
+.stock-summary-card span { color:#7d8e88; font-size:8px; font-weight:700; letter-spacing:1.15px; }
+.stock-summary-card b { margin:10px 0 5px; color:var(--ink); font:600 27px Georgia; line-height:1; }
+.stock-summary-card small { color:var(--muted); font-size:9px; line-height:1.35; }
 .stock-layout {
   display: grid;
   grid-template-columns: 1.65fr 0.72fr;
@@ -1301,6 +1325,36 @@ header h1 {
   background: #fff;
   color: #286b57;
   box-shadow: 0 1px 4px #173f351c;
+}
+.dashboard-custom-range {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding-left:5px;
+  border-left:1px solid #cad6d1;
+}
+.dashboard-custom-range label {
+  display:flex;
+  align-items:center;
+  gap:4px;
+  color:#667873;
+  font-size:8px;
+  font-weight:700;
+}
+.dashboard-custom-range input,.date-picker {
+  border:1px solid #cfd9d5;
+  border-radius:4px;
+  background:#fff;
+  color:#40534c;
+  font:600 9px Arial;
+}
+.dashboard-custom-range input { padding:5px 6px; }
+.date-picker { width:138px; padding:8px 9px; text-align:center; }
+.dashboard-alerts-inline { min-height:100%; }
+@media (max-width:900px) {
+  .stock-summary-grid { grid-template-columns:1fr; }
+  .dashboard-period { flex-wrap:wrap; }
+  .dashboard-custom-range { width:100%; padding:5px 0 0; border-left:0; border-top:1px solid #cad6d1; }
 }
 .dashboard-error {
   margin-bottom: 14px;
@@ -2654,7 +2708,33 @@ td .avatar {
 .stock-detail-history div { display:grid; grid-template-columns:90px 1fr 90px; gap:10px; padding:9px 0; border-bottom:1px solid #edf0ee; font-size:9px; }
 .stock-detail-history strong { text-align:right; }
 .move-transfert { color:#3c6685; }.move-inventaire { color:#8b692a; }
+.magasin-tabs { display:flex; gap:4px; padding:4px; margin-bottom:16px; border-radius:7px; background:#e9efec; }
+.magasin-tabs button { flex:1; border:0; border-radius:5px; padding:9px 10px; background:transparent; color:#667873; font-size:9px; font-weight:700; }
+.magasin-tabs button.active { background:#fff; color:#286b57; box-shadow:0 1px 4px #173f351c; }
+.magasin-kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:15px; }
+.magasin-kpis > * { display:flex; min-height:108px; flex-direction:column; justify-content:center; padding:16px 18px; border:1px solid var(--line); border-top:3px solid #3a856e; border-radius:6px; background:#fff; text-align:left; }
+.magasin-kpis > *.warning { border-top-color:#ad634d; }
+.magasin-kpis span { color:#7d8e88; font-size:8px; font-weight:700; letter-spacing:1px; }
+.magasin-kpis b { margin:10px 0 4px; color:var(--ink); font:600 27px Georgia; }
+.magasin-kpis small { color:var(--muted); font-size:9px; }
+.magasin-alerts .panel-title label { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:8px; }
+.magasin-alerts .panel-title input { width:58px; padding:6px; border:1px solid var(--line); border-radius:4px; }
+.magasin-alerts > button { display:grid; width:100%; grid-template-columns:34px 1fr 20px; gap:10px; align-items:center; padding:12px 20px; border:0; border-top:1px solid var(--line); background:#fff; text-align:left; }
+.magasin-alerts button i { display:grid; width:28px; height:28px; place-items:center; border-radius:50%; font-style:normal; font-weight:700; }
+.magasin-alerts button i.red { background:#f5e3dd; color:#a24e36; }.magasin-alerts button i.gold { background:#f7eedb; color:#987020; }.magasin-alerts button i.blue { background:#e3ebf3; color:#4f7097; }
+.magasin-alerts button span,.magasin-alerts button b,.magasin-alerts button small { display:block; }.magasin-alerts button small { margin-top:3px; color:var(--muted); font-size:8px; }.magasin-alerts button em { color:var(--muted); font-style:normal; }
+.magasin-filters { margin-bottom:12px; }.magasin-filters input { flex:1; }.magasin-filters select { min-width:180px; }
+.magasin-table { overflow:auto; }.magasin-table table { min-width:900px; }.magasin-table td b,.magasin-table td small { display:block; }.magasin-table td small { margin-top:3px; color:var(--muted); font-size:8px; }
+.equipment-status { display:inline-block; padding:5px 8px; border-radius:12px; background:#e5f1ec; color:#2c745e; font-size:8px; }.equipment-status.maintenance { background:#f7eedb; color:#8e6a23; }.equipment-status.hors_service { background:#f6e6e0; color:#a44f38; }.equipment-status.affecte { background:#e3ebf3; color:#4f7097; }.equipment-status.restitue { background:#eceeed; color:#6c7874; }
+.equipment-overdue { color:#a44f38; font-weight:700; }.equipment-warning { color:#987020; font-weight:700; }
+.equipment-modal { width:min(900px,calc(100vw - 30px)); max-height:92vh; overflow:auto; }
+.equipment-form-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:11px; }.equipment-form-grid .span-2 { grid-column:span 2; }.equipment-form-grid textarea { min-height:68px; resize:vertical; }
+.equipment-quick-actions { display:flex; flex-wrap:wrap; gap:7px; margin:17px 0; padding:13px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+.equipment-documents h4 { margin:12px 0; }.document-upload-row { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; margin-bottom:10px; }.document-upload-row label { padding:9px; border:1px dashed #bdcac5; border-radius:5px; font-size:8px; cursor:pointer; }.document-upload-row input { width:100%; margin-top:6px; font-size:7px; }
+.equipment-documents > button { display:block; width:100%; padding:8px 0; border:0; border-top:1px solid #edf0ee; background:#fff; color:#376b5c; text-align:left; font-size:9px; }
+.rental-agency-list { margin-bottom:16px; border:1px solid var(--line); border-radius:5px; }.rental-agency-list > div { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:9px 10px; border-bottom:1px solid #edf0ee; }.rental-agency-list > div:last-child { border-bottom:0; }.rental-agency-list span b,.rental-agency-list span small { display:block; }.rental-agency-list span small { margin-top:3px; color:var(--muted); font-size:8px; }
 @media (max-width:700px) { .stock-four-tabs { grid-template-columns:repeat(2,1fr); }.stock-detail-history div { grid-template-columns:70px 1fr 70px; } }
+@media (max-width:900px) { .magasin-kpis { grid-template-columns:repeat(2,1fr); }.equipment-form-grid { grid-template-columns:1fr 1fr; }.document-upload-row { grid-template-columns:1fr 1fr; } }
 .overtime-field { display:flex; flex-direction:column; gap:3px; }
 .overtime-field input { width:100%; }
 .overtime-field small { color:#9a6e25; }
