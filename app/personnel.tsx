@@ -60,6 +60,8 @@ export function MorningPresence({ workDate, dateLabel, toast }: { workDate: stri
     change(personId, { status: current.status === "present" ? "non_renseigne" : "present" });
   }
   async function saveAll() {
+    const missing = people.filter((person) => rowFor(person.id).status === "non_renseigne");
+    if (missing.length) { toast(`Renseignez encore ${missing.length} personne${missing.length > 1 ? "s" : ""} : présent ou motif d’absence.`); return; }
     setSaving(true);
     const db = createSupabaseBrowserClient();
     const values = people.map((person) => { const row = rowFor(person.id); return { project_id: projectId, person_id: person.id, work_date: workDate, status: row.status, arrival_time: row.arrival_time || null, departure_time: row.departure_time || null, scheduled_hours: row.scheduled_hours, regular_hours: row.regular_hours, automatic_overtime_hours: row.automatic_overtime_hours, manual_overtime_hours: row.manual_overtime_hours, created_by: row.created_by || userId, updated_by: userId, updated_at: new Date().toISOString() }; });
