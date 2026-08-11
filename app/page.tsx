@@ -5,6 +5,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { isoWeekNumber, type TimesheetSnapshot } from "@/lib/timesheet";
 import { MorningPresence, WorkScheduleSettings } from "@/app/personnel";
 import { MagasinManager } from "@/app/magasin";
+import { StockManager } from "@/app/stock";
 
 type View =
   | "dashboard"
@@ -14,7 +15,10 @@ type View =
   | "interim"
   | "taches"
   | "zones"
-  | "magasin"
+  | "stock"
+  | "engins"
+  | "outillage"
+  | "acces"
   | "cables"
   | "settings";
 
@@ -272,11 +276,17 @@ const personnelNav = [
   ["interim", "▣", "Intérim & feuilles"],
 ] as [View, string, string][];
 
+const magasinNav = [
+  ["stock", "▦", "Suivi de stock"],
+  ["engins", "♜", "Engins"],
+  ["outillage", "⌘", "Électroportatif / Outillage"],
+  ["acces", "⌑", "Moyens d’accès"],
+] as [View, string, string][];
+
 const nav = [
   ["dashboard", "⌂", "Vue d’ensemble"],
   ["taches", "▤", "Tâches & budgets"],
   ["zones", "⌖", "Zones de travail"],
-  ["magasin", "▦", "Magasin"],
   ["cables", "⌁", "Carnet de câbles"],
 ] as [View, string, string][];
 
@@ -573,6 +583,10 @@ export default function Home() {
           {personnelNav.map(([id, icon, label]) => (
             <button key={id} onClick={() => setView(id)} className={view === id ? "active" : ""}><i>{icon}</i>{label}</button>
           ))}
+          <span className="nav-section-label">MAGASIN</span>
+          {magasinNav.map(([id, icon, label]) => (
+            <button key={id} onClick={() => setView(id)} className={view === id ? "active" : ""}><i>{icon}</i>{label}</button>
+          ))}
           <span className="nav-section-label">CHANTIER</span>
           {nav.slice(1).map(([id, icon, label]) => (
             <button key={id} onClick={() => setView(id)} className={view === id ? "active" : ""}><i>{icon}</i>{label}</button>
@@ -654,7 +668,7 @@ export default function Home() {
             <h1>
               {view === "dashboard"
                 ? "Bonjour,"
-                : ([...personnelNav, ...nav].find((n) => n[0] === view)?.[2] ?? "Paramètres")}
+                : ([...personnelNav, ...magasinNav, ...nav].find((n) => n[0] === view)?.[2] ?? "Paramètres")}
             </h1>
           </div>
           <div className="header-actions">
@@ -704,7 +718,10 @@ export default function Home() {
         {view === "zones" && (
           <Zones accessToken={accessToken} toast={toast} />
         )}
-        {view === "magasin" && <MagasinManager toast={toast} accessToken={accessToken} />}
+        {view === "stock" && <StockManager toast={toast} accessToken={accessToken} />}
+        {view === "engins" && <MagasinManager section="engin" toast={toast} accessToken={accessToken} />}
+        {view === "outillage" && <MagasinManager section="outillage" toast={toast} accessToken={accessToken} />}
+        {view === "acces" && <MagasinManager section="acces" toast={toast} accessToken={accessToken} />}
         {view === "cables" && <Cables toast={toast} />}
         {view === "settings" && (
           <Settings
@@ -782,7 +799,7 @@ function Dashboard({
   };
   type DashboardAttendance = { person_id: string; work_date: string; status: string; regular_hours: number | string; automatic_overtime_hours: number | string; manual_overtime_hours: number | string | null };
   type DashboardSchedule = { weekday: number; is_working_day: boolean; theoretical_hours: number | string };
-  type DashboardEquipment = { id:string; internal_reference:string; description:string; vic_due_date:string|null; rental_planned_end_date:string|null; rental_actual_end_date:string|null; status:string; active:boolean };
+  type DashboardEquipment = { id:string; category:"engin"|"outillage"|"acces"; internal_reference:string; description:string; vic_due_date:string|null; rental_planned_end_date:string|null; rental_actual_end_date:string|null; status:string; active:boolean };
 
   const [period, setPeriod] = useState<Period>("week");
   const [customStart, setCustomStart] = useState("");
@@ -843,7 +860,7 @@ function Dashboard({
           .eq("project_id", project.id).order("created_at", { ascending: false }),
         db.from("daily_attendance").select("person_id,work_date,status,regular_hours,automatic_overtime_hours,manual_overtime_hours").eq("project_id", project.id).gte("work_date", dateRange.start < workDate ? dateRange.start : workDate).lte("work_date", dateRange.end > workDate ? dateRange.end : workDate),
         db.from("project_work_schedules").select("weekday,is_working_day,theoretical_hours").eq("project_id", project.id),
-        db.from("equipment_assets").select("id,internal_reference,description,vic_due_date,rental_planned_end_date,rental_actual_end_date,status,active").eq("project_id",project.id).eq("active",true),
+        db.from("equipment_assets").select("id,category,internal_reference,description,vic_due_date,rental_planned_end_date,rental_actual_end_date,status,active").eq("project_id",project.id).eq("active",true),
       ]);
       const firstError = personsResult.error || tasksResult.error || zonesResult.error || entriesResult.error;
       if (!active) return;
@@ -903,11 +920,12 @@ function Dashboard({
       const rows: Array<{tone:string;title:string;detail:string;view:View}> = [];
       const remaining = (date:string|null) => date === null ? null : Math.ceil((new Date(`${date}T12:00:00`).getTime() - Date.now()) / 86400000);
       const vicDays = remaining(asset.vic_due_date);
-      if (vicDays !== null && vicDays < 0) rows.push({ tone:"red", title:`VIC dépassée · ${asset.internal_reference}`, detail:asset.description, view:"magasin" });
-      else if (vicDays !== null && vicDays <= vicWarningDays) rows.push({ tone:"gold", title:`VIC à programmer · ${asset.internal_reference}`, detail:`${vicDays} jour(s) avant échéance`, view:"magasin" });
+      const equipmentView:View = asset.category === "engin" ? "engins" : asset.category === "outillage" ? "outillage" : "acces";
+      if (vicDays !== null && vicDays < 0) rows.push({ tone:"red", title:`VIC dépassée · ${asset.internal_reference}`, detail:asset.description, view:equipmentView });
+      else if (vicDays !== null && vicDays <= vicWarningDays) rows.push({ tone:"gold", title:`VIC à programmer · ${asset.internal_reference}`, detail:`${vicDays} jour(s) avant échéance`, view:equipmentView });
       const rentalDays = asset.rental_actual_end_date ? null : remaining(asset.rental_planned_end_date);
-      if (rentalDays !== null && rentalDays <= vicWarningDays) rows.push({ tone:rentalDays < 0 ? "red" : "blue", title:`Location ${rentalDays < 0 ? "échue" : "à terminer"} · ${asset.internal_reference}`, detail:asset.description, view:"magasin" });
-      if (["maintenance","hors_service"].includes(asset.status)) rows.push({ tone:asset.status === "hors_service" ? "red" : "gold", title:`${asset.status === "hors_service" ? "Hors service" : "Maintenance"} · ${asset.internal_reference}`, detail:asset.description, view:"magasin" });
+      if (rentalDays !== null && rentalDays <= vicWarningDays) rows.push({ tone:rentalDays < 0 ? "red" : "blue", title:`Location ${rentalDays < 0 ? "échue" : "à terminer"} · ${asset.internal_reference}`, detail:asset.description, view:equipmentView });
+      if (["maintenance","hors_service"].includes(asset.status)) rows.push({ tone:asset.status === "hors_service" ? "red" : "gold", title:`${asset.status === "hors_service" ? "Hors service" : "Maintenance"} · ${asset.internal_reference}`, detail:asset.description, view:equipmentView });
       return rows;
     }),
   ].slice(0, 5);
