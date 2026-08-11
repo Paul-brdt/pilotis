@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { isoWeekNumber, type TimesheetSnapshot } from "@/lib/timesheet";
+import { MorningPresence, WorkScheduleSettings } from "@/app/personnel";
 
 type View =
   | "dashboard"
+  | "presence"
   | "pointage"
   | "equipes"
   | "interim"
@@ -262,11 +264,15 @@ const stockItems = [
   },
 ];
 
+const personnelNav = [
+  ["presence", "✓", "Présence du matin"],
+  ["pointage", "◷", "Pointage journalier"],
+  ["interim", "▣", "Intérim & feuilles"],
+] as [View, string, string][];
+
 const nav = [
   ["dashboard", "⌂", "Vue d’ensemble"],
-  ["pointage", "◷", "Pointage journalier"],
   ["equipes", "♙", "Équipes"],
-  ["interim", "▣", "Intérim & feuilles"],
   ["taches", "▤", "Tâches & budgets"],
   ["zones", "⌖", "Zones de travail"],
   ["stock", "▦", "Suivi de stock"],
@@ -319,7 +325,6 @@ export default function Home() {
   );
   const [projectIdentity, setProjectIdentity] =
     useState<ProjectIdentity | null>(null);
-  const total = useMemo(() => tasks.reduce((a, t) => a + t.done, 0), []);
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
@@ -553,7 +558,7 @@ export default function Home() {
           </small>
         </div>
         <nav>
-          {nav.map(([id, icon, label]) => (
+          {nav.slice(0, 1).map(([id, icon, label]) => (
             <button
               key={id}
               onClick={() => setView(id)}
@@ -562,6 +567,14 @@ export default function Home() {
               <i>{icon}</i>
               {label}
             </button>
+          ))}
+          <span className="nav-section-label">PERSONNEL</span>
+          {personnelNav.map(([id, icon, label]) => (
+            <button key={id} onClick={() => setView(id)} className={view === id ? "active" : ""}><i>{icon}</i>{label}</button>
+          ))}
+          <span className="nav-section-label">CHANTIER</span>
+          {nav.slice(1).map(([id, icon, label]) => (
+            <button key={id} onClick={() => setView(id)} className={view === id ? "active" : ""}><i>{icon}</i>{label}</button>
           ))}
         </nav>
         <div className="sidebar-bottom">
@@ -640,7 +653,7 @@ export default function Home() {
             <h1>
               {view === "dashboard"
                 ? "Bonjour,"
-                : (nav.find((n) => n[0] === view)?.[2] ?? "Paramètres")}
+                : ([...personnelNav, ...nav].find((n) => n[0] === view)?.[2] ?? "Paramètres")}
             </h1>
           </div>
           <div className="header-actions">
@@ -669,8 +682,9 @@ export default function Home() {
         </header>
 
         {view === "dashboard" && (
-          <Dashboard total={total} setView={setView} toast={toast} />
+          <Dashboard setView={setView} toast={toast} workDate={workDate} />
         )}
+        {view === "presence" && <MorningPresence workDate={workDate} dateLabel={dateLabel} toast={toast} />}
         {view === "pointage" && (
           <Pointage
             accessToken={accessToken}
@@ -748,53 +762,190 @@ export default function Home() {
 }
 
 function Dashboard({
-  total,
   setView,
   toast,
+  workDate,
 }: {
-  total: number;
   setView: (v: View) => void;
   toast: (s: string) => void;
+  workDate: string;
 }) {
+  type Period = "day" | "week" | "month" | "all";
+  type DashboardTask = { id: string; code: string; name: string; budget_hours: number | string };
+  type DashboardZone = { id: string; code: string; name: string; physical_progress: number | string };
+  type DashboardEntry = {
+    person_id: string; task_id: string; zone_id: string | null; work_date: string;
+    hours: number | string; created_at: string;
+  };
+  type DashboardAudit = {
+    id: number; action: string; entity_type: string; payload: Record<string, unknown>; created_at: string;
+  };
+  type DashboardAttendance = { person_id: string; work_date: string; status: string; regular_hours: number | string; automatic_overtime_hours: number | string; manual_overtime_hours: number | string | null };
+  type DashboardSchedule = { weekday: number; is_working_day: boolean; theoretical_hours: number | string };
+
+  const [period, setPeriod] = useState<Period>("week");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [peopleRows, setPeopleRows] = useState<PersonRow[]>([]);
+  const [taskRows, setTaskRows] = useState<DashboardTask[]>([]);
+  const [zoneRows, setZoneRows] = useState<DashboardZone[]>([]);
+  const [entries, setEntries] = useState<DashboardEntry[]>([]);
+  const [audits, setAudits] = useState<DashboardAudit[]>([]);
+  const [attendanceRows, setAttendanceRows] = useState<DashboardAttendance[]>([]);
+  const [scheduleRows, setScheduleRows] = useState<DashboardSchedule[]>([]);
+
+  const dateRange = useMemo(() => {
+    const anchor = new Date(`${workDate}T12:00:00`);
+    const start = new Date(anchor);
+    const end = new Date(anchor);
+    if (period === "week") {
+      const offset = (anchor.getDay() + 6) % 7;
+      start.setDate(anchor.getDate() - offset);
+      end.setDate(start.getDate() + 6);
+    } else if (period === "month") {
+      start.setDate(1);
+      end.setMonth(start.getMonth() + 1, 0);
+    } else if (period === "all") {
+      start.setFullYear(2000, 0, 1);
+    }
+    const iso = (date: Date) => date.toISOString().slice(0, 10);
+    return { start: iso(start), end: iso(end) };
+  }, [period, workDate]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadDashboard() {
+      setLoading(true);
+      setError("");
+      const db = createSupabaseBrowserClient();
+      const { data: project, error: projectError } = await db
+        .from("projects").select("id").eq("code", "24-018").single();
+      if (!project || projectError) {
+        if (active) { setError("Le chantier n’a pas pu être chargé."); setLoading(false); }
+        return;
+      }
+      const [personsResult, tasksResult, zonesResult, entriesResult, auditsResult, attendanceResult, schedulesResult] = await Promise.all([
+        db.from("people")
+          .select("id,full_name,qualification,contract_type,coefficient,active,agency_id,agencies(name)")
+          .eq("project_id", project.id).eq("active", true).order("full_name"),
+        db.from("tasks").select("id,code,name,budget_hours")
+          .eq("project_id", project.id).order("code"),
+        db.from("zones").select("id,code,name,physical_progress")
+          .eq("project_id", project.id).order("code"),
+        db.from("time_entries")
+          .select("person_id,task_id,zone_id,work_date,hours,created_at")
+          .eq("project_id", project.id).order("created_at", { ascending: false }),
+        db.from("audit_events").select("id,action,entity_type,payload,created_at")
+          .eq("project_id", project.id).order("created_at", { ascending: false }).limit(8),
+        db.from("daily_attendance").select("person_id,work_date,status,regular_hours,automatic_overtime_hours,manual_overtime_hours").eq("project_id", project.id).gte("work_date", dateRange.start).lte("work_date", dateRange.end),
+        db.from("project_work_schedules").select("weekday,is_working_day,theoretical_hours").eq("project_id", project.id),
+      ]);
+      const firstError = personsResult.error || tasksResult.error || zonesResult.error || entriesResult.error;
+      if (!active) return;
+      if (firstError) setError("Certaines données du tableau de bord sont indisponibles.");
+      setPeopleRows((personsResult.data || []) as unknown as PersonRow[]);
+      setTaskRows((tasksResult.data || []) as DashboardTask[]);
+      setZoneRows((zonesResult.data || []) as DashboardZone[]);
+      setEntries((entriesResult.data || []) as DashboardEntry[]);
+      setAudits((auditsResult.data || []) as DashboardAudit[]);
+      setAttendanceRows((attendanceResult.data || []) as DashboardAttendance[]);
+      setScheduleRows((schedulesResult.data || []) as DashboardSchedule[]);
+      setLoading(false);
+    }
+    loadDashboard();
+    return () => { active = false; };
+  }, [dateRange.start, dateRange.end]);
+
+  const hours = (rows: DashboardEntry[]) => rows.reduce((sum, row) => sum + Number(row.hours || 0), 0);
+  const periodEntries = entries.filter((entry) => entry.work_date >= dateRange.start && entry.work_date <= dateRange.end);
+  const totalHours = hours(periodEntries);
+  const todayEntries = entries.filter((entry) => entry.work_date === workDate);
+  const todayHours = hours(todayEntries);
+  const todayAttendance = attendanceRows.filter((row) => row.work_date === workDate);
+  const presentIds = new Set(todayAttendance.filter((row) => row.status === "present").map((row) => row.person_id));
+  const recordedIds = new Set(todayAttendance.filter((row) => row.status !== "non_renseigne").map((row) => row.person_id));
+  const missingPeople = peopleRows.filter((person) => !recordedIds.has(person.id));
+  const internalCount = peopleRows.filter((person) => person.contract_type === "interne").length;
+  const interimCount = peopleRows.length - internalCount;
+  const periodDays = period === "day" ? 1 : Math.max(1, Math.round((new Date(`${dateRange.end}T12:00:00`).getTime() - new Date(`${dateRange.start}T12:00:00`).getTime()) / 86400000) + 1);
+  const expectedHours = period === "all" ? 0 : Array.from({ length: periodDays }, (_, i) => {
+    const date = new Date(`${dateRange.start}T12:00:00`); date.setDate(date.getDate() + i);
+    const schedule = scheduleRows.find((row) => row.weekday === date.getDay());
+    return schedule?.is_working_day ? Number(schedule.theoretical_hours) * peopleRows.length : 0;
+  }).reduce((sum, value) => sum + value, 0);
+  const completion = expectedHours ? Math.round((totalHours / expectedHours) * 100) : 0;
+
+  const taskStats = taskRows.map((task, index) => {
+    const done = hours(entries.filter((entry) => entry.task_id === task.id));
+    const budget = Number(task.budget_hours || 0);
+    return { ...task, done, budget, percent: budget ? Math.round((done / budget) * 100) : 0, color: ["#397f68", "#506fa7", "#936f25", "#795b9d", "#b15e43"][index % 5] };
+  }).sort((a, b) => b.percent - a.percent);
+  const totalBudget = taskRows.reduce((sum, task) => sum + Number(task.budget_hours || 0), 0);
+  const budgetUsed = totalBudget ? Math.round((totalHours / totalBudget) * 100) : 0;
+  const zoneStats = zoneRows.map((zone) => ({
+    ...zone,
+    hours: hours(periodEntries.filter((entry) => entry.zone_id === zone.id)),
+    physical: Number(zone.physical_progress || 0),
+  })).sort((a, b) => b.hours - a.hours);
+
+  const alerts = [
+    ...(missingPeople.length ? [{ tone: "gold", title: `${missingPeople.length} présence${missingPeople.length > 1 ? "s" : ""} à renseigner aujourd’hui`, detail: missingPeople.slice(0, 3).map((p) => p.full_name).join(", "), view: "presence" as View }] : []),
+    ...taskStats.filter((task) => task.percent >= 100).map((task) => ({ tone: "red", title: `Budget dépassé · ${task.code}`, detail: `${task.done.toLocaleString("fr-FR")} h sur ${task.budget.toLocaleString("fr-FR")} h`, view: "taches" as View })),
+    ...taskStats.filter((task) => task.percent >= 80 && task.percent < 100).map((task) => ({ tone: "gold", title: `Budget à surveiller · ${task.code}`, detail: `${task.percent}% consommé`, view: "taches" as View })),
+    ...zoneStats.filter((zone) => zone.physical === 0 && zone.hours > 0).map((zone) => ({ tone: "blue", title: `Avancement à renseigner · ${zone.code}`, detail: `${zone.hours.toLocaleString("fr-FR")} h déjà affectées`, view: "zones" as View })),
+  ].slice(0, 5);
+
+  const periodLabels: Record<Period, string> = { day: "Jour", week: "Semaine", month: "Mois", all: "Cumul" };
+  const auditLabel = (audit: DashboardAudit) => {
+    const labels: Record<string, string> = {
+      time_entry_created: "Pointage enregistré", time_entry_updated: "Pointage modifié",
+      weekly_timesheet_generated: "Feuille intérim générée", weekly_timesheet_validated: "Feuille intérim validée",
+      task_updated: "Tâche mise à jour", zone_updated: "Zone mise à jour",
+    };
+    return labels[audit.action] || audit.action.replaceAll("_", " ");
+  };
+
   return (
     <div className="content">
       <section className="intro">
         <div>
           <h2>Voici où en est votre chantier aujourd’hui.</h2>
-          <p>Dernière mise à jour il y a 12 minutes</p>
+          <p>Données actualisées depuis les pointages du chantier</p>
         </div>
-        <div className="weather">
-          ☀ <b>27°C</b>
-          <small>Ville exemple</small>
+        <div className="dashboard-period" aria-label="Période du tableau de bord">
+          {(Object.keys(periodLabels) as Period[]).map((key) => (
+            <button className={period === key ? "active" : ""} key={key} onClick={() => setPeriod(key)}>{periodLabels[key]}</button>
+          ))}
         </div>
       </section>
+      {error && <div className="dashboard-error">{error}</div>}
       <section className="kpis">
         <Kpi
-          label="AVANCEMENT GLOBAL"
-          value="64%"
-          detail="↑ 4,2% cette semaine"
+          label="POINTAGE DE LA PÉRIODE"
+          value={loading ? "…" : `${totalHours.toLocaleString("fr-FR")} h`}
+          detail={expectedHours ? `sur ${expectedHours.toLocaleString("fr-FR")} h théoriques` : "Cumul depuis le démarrage"}
           tone="green"
-          ring={64}
+          ring={Math.min(completion, 100)}
         />
         <Kpi
-          label="HEURES CONSOMMÉES"
-          value={`${total.toLocaleString("fr-FR")} h`}
-          detail="sur 2 860 h budgétées"
+          label="BUDGET CONSOMMÉ"
+          value={loading ? "…" : `${budgetUsed}%`}
+          detail={`${totalBudget.toLocaleString("fr-FR")} h budgétées`}
           tone="blue"
-          progress={61}
+          progress={Math.min(budgetUsed, 100)}
         />
         <Kpi
           label="ÉQUIPE AUJOURD’HUI"
-          value="12 pers."
-          detail="9 internes · 3 intérimaires"
+          value={loading ? "…" : `${presentIds.size}/${peopleRows.length} pers.`}
+          detail={`${internalCount} internes · ${interimCount} intérimaires`}
           tone="gold"
           avatars
         />
         <Kpi
-          label="ÉCART PRÉVISIONNEL"
-          value="+ 86 h"
-          detail="⚠ Dérive estimée à terminaison"
-          tone="red"
+          label="À AFFECTER AUJOURD’HUI"
+          value={loading ? "…" : `${Math.max(0, todayAttendance.reduce((sum, row) => row.status === "present" ? sum + Number(row.regular_hours) + Number(row.manual_overtime_hours ?? row.automatic_overtime_hours) : sum, 0) - todayHours).toLocaleString("fr-FR")} h`}
+          detail={`${todayHours.toLocaleString("fr-FR")} h déjà pointées`}
+          tone={todayHours > todayAttendance.reduce((sum, row) => row.status === "present" ? sum + Number(row.regular_hours) + Number(row.manual_overtime_hours ?? row.automatic_overtime_hours) : sum, 0) ? "red" : "gold"}
         />
       </section>
       <section className="two-cols">
@@ -812,8 +963,8 @@ function Dashboard({
             <span>RÉALISÉ</span>
             <span>AVANCEMENT</span>
           </div>
-          {tasks.map((t) => {
-            const p = Math.round((t.done / t.budget) * 100);
+          {taskStats.slice(0, 5).map((t) => {
+            const p = t.percent;
             return (
               <div className="task-row" key={t.code}>
                 <div>
@@ -845,67 +996,36 @@ function Dashboard({
           </div>
           <div className="activity-summary">
             <div>
-              <b>92 h</b>
+              <b>{todayHours.toLocaleString("fr-FR")} h</b>
               <small>saisies aujourd’hui</small>
             </div>
             <div>
-              <b>12</b>
-              <small>personnes présentes</small>
+              <b>{presentIds.size}</b>
+              <small>personnes pointées</small>
             </div>
           </div>
           <div className="timeline">
-            <Event
-              time="15:42"
-              color="green"
-              title="Pointage validé"
-              text="Équipier 01 · Équipe A · 40 h"
-            />
-            <Event
-              time="14:18"
-              color="blue"
-              title="18 câbles mis à jour"
-              text="Import carnet_client_v4.xlsx"
-            />
-            <Event
-              time="11:05"
-              color="gold"
-              title="Anomalie signalée"
-              text="C-0012 · Longueur insuffisante"
-            />
-            <Event
-              time="08:12"
-              color="purple"
-              title="Équipe arrivée sur site"
-              text="12 présences enregistrées"
-            />
+            {audits.length ? audits.slice(0, 5).map((audit) => (
+              <Event key={audit.id} time={new Date(audit.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                color="green" title={auditLabel(audit)} text={new Date(audit.created_at).toLocaleDateString("fr-FR")} />
+            )) : <p className="dashboard-empty">Aucune activité récente.</p>}
           </div>
         </div>
       </section>
       <section className="bottom-grid">
-        <div className="panel weekly">
+        <div className="panel dashboard-zones">
           <div className="panel-title">
             <div>
-              <span>HEURES DE LA SEMAINE</span>
-              <h3>Répartition quotidienne</h3>
+              <span>AVANCEMENT PAR ZONE</span>
+              <h3>Heures et avancement physique</h3>
             </div>
-            <b>
-              478 h <small>/ 500 h prévues</small>
-            </b>
+            <button onClick={() => setView("zones")}>Voir les zones →</button>
           </div>
-          <div className="chart">
-            {[
-              ["Lun", 92],
-              ["Mar", 104],
-              ["Mer", 96],
-              ["Jeu", 94],
-              ["Ven", 92],
-              ["Sam", 0],
-            ].map(([d, h]) => (
-              <div key={d}>
-                <span style={{ height: `${Number(h) * 0.72}px` }}>
-                  <i>{h || "—"}</i>
-                </span>
-                <small>{d}</small>
+          <div className="dashboard-zone-list">
+            {zoneStats.map((zone) => (
+              <div className="dashboard-zone-row" key={zone.id}>
+                <div><b>{zone.name}</b><small>{zone.code} · {zone.hours.toLocaleString("fr-FR")} h</small></div>
+                <div className="dashboard-zone-progress"><span>{zone.physical}%</span><div className="bar"><i style={{ width: `${zone.physical}%` }} /></div></div>
               </div>
             ))}
           </div>
@@ -916,7 +1036,7 @@ function Dashboard({
             <i>◷</i>
             <div>
               <b>Saisir les heures</b>
-              <small>Pointage du 7 août</small>
+              <small>{new Date(`${workDate}T12:00:00`).toLocaleDateString("fr-FR")}</small>
             </div>
             <em>›</em>
           </button>
@@ -928,15 +1048,23 @@ function Dashboard({
             </div>
             <em>›</em>
           </button>
-          <button onClick={() => toast("Rapport hebdomadaire généré")}>
+          <button onClick={() => toast("La génération de rapport sera ajoutée au prochain lot")}>
             <i>▤</i>
             <div>
               <b>Générer le rapport</b>
-              <small>Semaine 32</small>
+              <small>Semaine {isoWeekNumber(new Date(`${workDate}T12:00:00`))}</small>
             </div>
             <em>›</em>
           </button>
         </div>
+      </section>
+      <section className="panel dashboard-alerts">
+        <div className="panel-title"><div><span>POINTS D’ATTENTION</span><h3>Alertes actionnables</h3></div><b>{alerts.length}</b></div>
+        {alerts.length ? alerts.map((alert, index) => (
+          <button key={`${alert.title}-${index}`} onClick={() => setView(alert.view)}>
+            <i className={alert.tone}>!</i><span><b>{alert.title}</b><small>{alert.detail}</small></span><em>›</em>
+          </button>
+        )) : <p className="dashboard-empty">Aucune alerte sur la période sélectionnée.</p>}
       </section>
     </div>
   );
@@ -971,6 +1099,7 @@ type DailyTimeEntry = {
   zones: { code: string } | null;
 };
 type DailyAssignment = { hours: number; taskCode: string; zoneCode: string };
+type DailyAttendanceTarget = { person_id: string; status: string; scheduled_hours: number | string; regular_hours: number | string; automatic_overtime_hours: number | string; manual_overtime_hours: number | string | null };
 
 function Pointage({
   accessToken,
@@ -992,6 +1121,7 @@ function Pointage({
   const [dailyAssignments, setDailyAssignments] = useState<
     Record<string, DailyAssignment[]>
   >({});
+  const [attendanceTargets, setAttendanceTargets] = useState<Record<string, DailyAttendanceTarget>>({});
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [taskId, setTaskId] = useState("");
   const [zoneId, setZoneId] = useState("");
@@ -1014,6 +1144,7 @@ function Pointage({
       { data: loadedTasks },
       { data: loadedZones },
       { data: dailyEntries },
+      { data: attendance },
     ] = await Promise.all([
       db
         .from("people")
@@ -1039,6 +1170,7 @@ function Pointage({
         .eq("project_id", project.id)
         .eq("work_date", workDate)
         .order("created_at", { ascending: true }),
+      db.from("daily_attendance").select("person_id,status,scheduled_hours,regular_hours,automatic_overtime_hours,manual_overtime_hours").eq("project_id", project.id).eq("work_date", workDate),
     ]);
     const entries = (dailyEntries ?? []) as unknown as DailyTimeEntry[];
     const totals = entries.reduce<Record<string, number>>((result, entry) => {
@@ -1062,6 +1194,7 @@ function Pointage({
     setZoneRows((loadedZones ?? []) as WorkZone[]);
     setAssignedHours(totals);
     setDailyAssignments(summaries);
+    setAttendanceTargets(Object.fromEntries(((attendance ?? []) as DailyAttendanceTarget[]).map((row) => [row.person_id, row])));
     setTaskId((current) =>
       loadedTasks?.some((task) => task.id === current)
         ? current
@@ -1173,6 +1306,9 @@ function Pointage({
           {peopleRows.map((person) => {
             const totalHours = assignedHours[person.id] ?? 0;
             const assignments = dailyAssignments[person.id] ?? [];
+            const attendance = attendanceTargets[person.id];
+            const targetHours = attendance?.status === "present" ? Number(attendance.regular_hours) + Number(attendance.manual_overtime_hours ?? attendance.automatic_overtime_hours) : 0;
+            const remainingHours = targetHours - totalHours;
             return (
               <label
                 className={`person-check ${selectedIds.includes(person.id) ? "selected" : ""}`}
@@ -1221,8 +1357,8 @@ function Pointage({
                 >
                   {totalHours.toLocaleString("fr-FR", {
                     maximumFractionDigits: 2,
-                  })}{" "}
-                  h
+                  })} h
+                  {attendance && <small className={remainingHours < 0 ? "over" : remainingHours > 0 ? "under" : "complete"}>{targetHours.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} h cible · {remainingHours > 0 ? `${remainingHours.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} h restantes` : remainingHours < 0 ? `${Math.abs(remainingHours).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} h en trop` : "complet"}</small>}
                 </em>
               </label>
             );
@@ -2288,7 +2424,7 @@ function Settings({
   onProjectUpdated: () => Promise<void>;
   toast: (message: string) => void;
 }) {
-  const [tab, setTab] = useState<"chantier" | "application" | "qualifications" | "users">(
+  const [tab, setTab] = useState<"chantier" | "application" | "horaires" | "qualifications" | "users">(
     "chantier",
   );
   const [project, setProject] = useState<ProjectSettings | null>(null);
@@ -2527,6 +2663,7 @@ function Settings({
         >
           Application
         </button>
+        <button className={tab === "horaires" ? "active" : ""} onClick={() => setTab("horaires")}>Horaires</button>
         <button className={tab === "qualifications" ? "active" : ""} onClick={() => setTab("qualifications")}>Qualifications</button>
         {isAdministrator && (
           <button
@@ -2664,6 +2801,7 @@ function Settings({
           </div>
         </form>
       )}
+      {tab === "horaires" && <WorkScheduleSettings toast={toast} />}
       {tab === "qualifications" && (
         <div>
           <form className="panel settings-form" onSubmit={createQualification}>
