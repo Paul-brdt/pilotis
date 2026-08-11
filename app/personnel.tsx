@@ -6,9 +6,9 @@ import { createSupabaseBrowserClient } from "@/lib/supabase";
 export type AttendanceStatus = "non_renseigne" | "present" | "absent" | "conge" | "formation" | "maladie";
 type Person = { id: string; full_name: string; qualification: string | null; contract_type: string };
 export type WorkSchedule = { id?: string; project_id: string; weekday: number; is_working_day: boolean; start_time: string; end_time: string; break_minutes: number; theoretical_hours: number; updated_by?: string };
-type Attendance = { id?: string; person_id: string; status: AttendanceStatus; arrival_time: string | null; departure_time: string | null; scheduled_hours: number; regular_hours: number; automatic_overtime_hours: number; manual_overtime_hours: number | null };
+type Attendance = { id?: string; person_id: string; status: AttendanceStatus; arrival_time: string | null; departure_time: string | null; scheduled_hours: number; regular_hours: number; automatic_overtime_hours: number; manual_overtime_hours: number | null; created_by?: string };
 
-const statuses: Array<[AttendanceStatus, string]> = [["non_renseigne", "Non renseigné"], ["present", "Présent"], ["absent", "Absent"], ["conge", "Congé"], ["formation", "Formation"], ["maladie", "Maladie"]];
+const absenceReasons: Array<[AttendanceStatus, string]> = [["non_renseigne", "Choisir un motif…"], ["absent", "Absent"], ["conge", "Congé"], ["formation", "Formation"], ["maladie", "Maladie"]];
 const dayNames = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
 const shortTime = (value: string | null | undefined) => value ? value.slice(0, 5) : "";
 const minutes = (value: string) => { const [h, m] = value.split(":").map(Number); return h * 60 + m; };
@@ -30,7 +30,7 @@ export function MorningPresence({ workDate, dateLabel, toast }: { workDate: stri
   const [projectId, setProjectId] = useState("");
   const [userId, setUserId] = useState("");
   const [loading, setLoading] = useState(true);
-  const [savingId, setSavingId] = useState("");
+  const [saving, setSaving] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -41,7 +41,7 @@ export function MorningPresence({ workDate, dateLabel, toast }: { workDate: stri
     const [{ data: persons }, { data: schedules }, { data: attendance }] = await Promise.all([
       db.from("people").select("id,full_name,qualification,contract_type").eq("project_id", project.id).eq("active", true).order("full_name"),
       db.from("project_work_schedules").select("*").eq("project_id", project.id).eq("weekday", weekday).maybeSingle(),
-      db.from("daily_attendance").select("id,person_id,status,arrival_time,departure_time,scheduled_hours,regular_hours,automatic_overtime_hours,manual_overtime_hours").eq("project_id", project.id).eq("work_date", workDate),
+      db.from("daily_attendance").select("id,person_id,status,arrival_time,departure_time,scheduled_hours,regular_hours,automatic_overtime_hours,manual_overtime_hours,created_by").eq("project_id", project.id).eq("work_date", workDate),
     ]);
     const byPerson: Record<string, Attendance> = {};
     for (const row of attendance || []) byPerson[row.person_id] = { ...row, scheduled_hours: Number(row.scheduled_hours), regular_hours: Number(row.regular_hours), automatic_overtime_hours: Number(row.automatic_overtime_hours), manual_overtime_hours: row.manual_overtime_hours === null ? null : Number(row.manual_overtime_hours) } as Attendance;
@@ -53,22 +53,29 @@ export function MorningPresence({ workDate, dateLabel, toast }: { workDate: stri
     return rows[personId] || { person_id: personId, status: "non_renseigne", arrival_time: null, departure_time: null, scheduled_hours: 0, regular_hours: 0, automatic_overtime_hours: 0, manual_overtime_hours: null };
   }
   function change(personId: string, patch: Partial<Attendance>) {
-    setRows((current) => { const next = { ...rowFor(personId), ...patch }; const calc = calculateAttendance(schedule, next.status, shortTime(next.arrival_time), shortTime(next.departure_time)); return { ...current, [personId]: { ...next, scheduled_hours: calc.scheduled, regular_hours: calc.regular, automatic_overtime_hours: calc.overtime, ...(next.status !== "present" ? { arrival_time: null, departure_time: null, manual_overtime_hours: null } : {}) } }; });
+    setRows((current) => { const base = current[personId] || rowFor(personId); const next = { ...base, ...patch }; const calc = calculateAttendance(schedule, next.status, shortTime(next.arrival_time), shortTime(next.departure_time)); return { ...current, [personId]: { ...next, scheduled_hours: calc.scheduled, regular_hours: calc.regular, automatic_overtime_hours: calc.overtime, ...(next.status !== "present" ? { arrival_time: null, departure_time: null, manual_overtime_hours: null } : {}) } }; });
   }
-  async function save(personId: string) {
-    setSavingId(personId); const db = createSupabaseBrowserClient(); const row = rowFor(personId);
-    const values = { project_id: projectId, person_id: personId, work_date: workDate, status: row.status, arrival_time: row.arrival_time || null, departure_time: row.departure_time || null, scheduled_hours: row.scheduled_hours, regular_hours: row.regular_hours, automatic_overtime_hours: row.automatic_overtime_hours, manual_overtime_hours: row.manual_overtime_hours, created_by: userId, updated_by: userId, updated_at: new Date().toISOString() };
-    const { error } = await db.from("daily_attendance").upsert(values, { onConflict: "project_id,person_id,work_date" }); setSavingId("");
-    if (error) toast(`Enregistrement impossible : ${error.message}`); else { toast("Présence enregistrée"); await load(); }
+  function markPresent(personId: string) {
+    const current = rowFor(personId);
+    change(personId, { status: current.status === "present" ? "non_renseigne" : "present" });
+  }
+  async function saveAll() {
+    setSaving(true);
+    const db = createSupabaseBrowserClient();
+    const values = people.map((person) => { const row = rowFor(person.id); return { project_id: projectId, person_id: person.id, work_date: workDate, status: row.status, arrival_time: row.arrival_time || null, departure_time: row.departure_time || null, scheduled_hours: row.scheduled_hours, regular_hours: row.regular_hours, automatic_overtime_hours: row.automatic_overtime_hours, manual_overtime_hours: row.manual_overtime_hours, created_by: row.created_by || userId, updated_by: userId, updated_at: new Date().toISOString() }; });
+    const { error } = await db.from("daily_attendance").upsert(values, { onConflict: "project_id,person_id,work_date" });
+    setSaving(false);
+    if (error) toast(`Enregistrement impossible : ${error.message}`); else { toast(`${people.length} présences enregistrées`); await load(); }
   }
   const summary = people.reduce((acc, person) => { const row = rowFor(person.id); acc[row.status] = (acc[row.status] || 0) + 1; return acc; }, {} as Record<string, number>);
   if (loading) return <div className="content page-content"><div className="panel empty-state">Chargement des présences…</div></div>;
   return <div className="content page-content presence-page">
-    <div className="page-head"><div><h2>Présence du matin · {dateLabel}</h2><p>Saisie individuelle, modifiable à tout moment et historisée.</p></div><span className="status">{schedule?.is_working_day ? `${schedule.theoretical_hours} h théoriques · ${shortTime(schedule.start_time)}–${shortTime(schedule.end_time)}` : "Journée non travaillée"}</span></div>
+    <div className="page-head"><div><h2>Présence du matin · {dateLabel}</h2><p>Validez les présents d’un clic, puis choisissez uniquement le motif des non-présents.</p></div><div className="presence-actions"><span className="status">{schedule?.is_working_day ? `${schedule.theoretical_hours} h théoriques · ${shortTime(schedule.start_time)}–${shortTime(schedule.end_time)}` : "Journée non travaillée"}</span><button className="primary" disabled={saving || !people.length} onClick={() => void saveAll()}>{saving ? "Enregistrement…" : "Enregistrer toutes les présences"}</button></div></div>
     <section className="presence-kpis"><div><b>{summary.present || 0}</b><small>Présents</small></div><div><b>{summary.non_renseigne || 0}</b><small>Non renseignés</small></div><div><b>{people.length - (summary.present || 0) - (summary.non_renseigne || 0)}</b><small>Absences justifiées</small></div></section>
-    <div className="panel presence-table"><div className="presence-head"><span>COLLABORATEUR</span><span>STATUT</span><span>ARRIVÉE</span><span>DÉPART</span><span>HEURES NORMALES</span><span>HEURES SUP.</span><span /></div>
-      {people.map((person) => { const row = rowFor(person.id); const overtime = row.manual_overtime_hours ?? row.automatic_overtime_hours; return <div className="presence-row" key={person.id}><div><b>{person.full_name}</b><small>{person.qualification || "Sans qualification"}</small></div><select value={row.status} onChange={(e) => change(person.id, { status: e.target.value as AttendanceStatus })}>{statuses.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select><input type="time" disabled={row.status !== "present"} value={shortTime(row.arrival_time)} onChange={(e) => change(person.id, { arrival_time: e.target.value })}/><input type="time" disabled={row.status !== "present"} value={shortTime(row.departure_time)} onChange={(e) => change(person.id, { departure_time: e.target.value })}/><strong>{row.regular_hours.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} h</strong><label className="overtime-field"><input type="number" min="0" max="24" step="0.25" disabled={row.status !== "present"} value={overtime} onChange={(e) => change(person.id, { manual_overtime_hours: Number(e.target.value) })}/>{row.manual_overtime_hours !== null && <small>corrigé · auto {row.automatic_overtime_hours.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} h</small>}</label><button className="primary" disabled={savingId === person.id} onClick={() => void save(person.id)}>{savingId === person.id ? "…" : "Enregistrer"}</button></div>; })}
+    <div className="panel presence-table"><div className="presence-head"><span>COLLABORATEUR</span><span>PRÉSENT</span><span>MOTIF SI NON-PRÉSENT</span><span>ARRIVÉE</span><span>DÉPART</span><span>HEURES NORMALES</span><span>HEURES SUP.</span></div>
+      {people.map((person) => { const row = rowFor(person.id); const overtime = row.manual_overtime_hours ?? row.automatic_overtime_hours; return <div className={`presence-row ${row.status === "present" ? "is-present" : ""}`} key={person.id}><div><b>{person.full_name}</b><small>{person.qualification || "Sans qualification"}</small></div><button className={`present-toggle ${row.status === "present" ? "active" : ""}`} aria-pressed={row.status === "present"} onClick={() => markPresent(person.id)}>{row.status === "present" ? "✓ Présent" : "Valider"}</button><select disabled={row.status === "present"} value={row.status === "present" ? "non_renseigne" : row.status} onChange={(e) => change(person.id, { status: e.target.value as AttendanceStatus })}>{absenceReasons.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select><input type="time" disabled={row.status !== "present"} value={shortTime(row.arrival_time)} onChange={(e) => change(person.id, { arrival_time: e.target.value })}/><input type="time" disabled={row.status !== "present"} value={shortTime(row.departure_time)} onChange={(e) => change(person.id, { departure_time: e.target.value })}/><strong>{row.regular_hours.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} h</strong><label className="overtime-field"><input type="number" min="0" max="24" step="0.25" disabled={row.status !== "present"} value={overtime} onChange={(e) => change(person.id, { manual_overtime_hours: Number(e.target.value) })}/>{row.manual_overtime_hours !== null && <small>corrigé · auto {row.automatic_overtime_hours.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} h</small>}</label></div>; })}
     </div>
+    <div className="presence-save-bar"><span>{summary.non_renseigne || 0} personne(s) restent à renseigner</span><button className="primary" disabled={saving || !people.length} onClick={() => void saveAll()}>{saving ? "Enregistrement…" : "Enregistrer la feuille de présence"}</button></div>
   </div>;
 }
 
