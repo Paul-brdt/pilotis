@@ -332,7 +332,7 @@ export default function Home() {
   const [accountError, setAccountError] = useState("");
   const [accountSaving, setAccountSaving] = useState(false);
   const [view, setView] = useState<View>("dashboard");
-  const [openNavSections,setOpenNavSections]=useState({personnel:true,magasin:true,chantier:true});
+  const [openNavSections,setOpenNavSections]=useState({personnel:false,magasin:false,chantier:false});
   const [notice, setNotice] = useState("");
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(
