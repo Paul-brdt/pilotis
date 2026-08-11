@@ -367,26 +367,25 @@ export default function Home() {
     event.preventDefault();
     setAuthError("");
     const form = new FormData(event.currentTarget);
-    const email = String(form.get("email") ?? "").trim();
+    const username = String(form.get("username") ?? "").trim();
     const password = String(form.get("password") ?? "");
-    const createAccount = form.get("intent") === "signup";
 
-    if (!email || password.length < 8) {
-      setAuthError(
-        "Renseignez une adresse e-mail et un mot de passe d’au moins 8 caractères.",
-      );
+    if (!username || !password) {
+      setAuthError("Renseignez votre identifiant et votre mot de passe.");
+      return;
+    }
+
+    if (username.toLowerCase() !== "admin") {
+      setAuthError("Identifiant ou mot de passe incorrect.");
       return;
     }
 
     const supabase = createSupabaseBrowserClient();
-    const result = createAccount
-      ? await supabase.auth.signUp({ email, password })
-      : await supabase.auth.signInWithPassword({ email, password });
-    if (result.error) setAuthError(result.error.message);
-    else if (!result.data.session)
-      setAuthError(
-        "Compte créé. Confirmez votre adresse e-mail avant de vous connecter.",
-      );
+    const result = await supabase.auth.signInWithPassword({
+      email: "admin@pilotis.internal",
+      password,
+    });
+    if (result.error) setAuthError("Identifiant ou mot de passe incorrect.");
   }
 
   if (!authReady)
@@ -406,11 +405,11 @@ export default function Home() {
           <h1>PILOTIS</h1>
           <p>Connectez-vous à votre espace chantier.</p>
           <label>
-            Adresse e-mail
+            Identifiant
             <input
-              name="email"
-              type="email"
-              autoComplete="email"
+              name="username"
+              type="text"
+              autoComplete="username"
               required
               value={authEmail}
               onChange={(e) => setAuthEmail(e.target.value)}
@@ -422,7 +421,6 @@ export default function Home() {
               name="password"
               type="password"
               autoComplete="current-password"
-              minLength={8}
               required
               value={authPassword}
               onChange={(e) => setAuthPassword(e.target.value)}
@@ -431,14 +429,9 @@ export default function Home() {
           {authError && <div className="auth-error">{authError}</div>}
           <button
             className="primary"
-            name="intent"
-            value="signin"
             type="submit"
           >
             Se connecter
-          </button>
-          <button name="intent" value="signup" type="submit">
-            Créer le premier compte
           </button>
         </form>
       </main>
