@@ -241,12 +241,21 @@ export async function POST(request: Request) {
         const assetId = String(body.assetId ?? ""); const movementType = String(body.movementType);
         const nextStatus: Record<string, string> = { affectation: "affecte", retour: "disponible", transfert: "disponible", maintenance: "maintenance", remise_service: "disponible", restitution: "restitue" };
         if (!nextStatus[movementType]) return Response.json({ error: "Mouvement de matériel invalide." }, { status: 400 });
-        const { data: asset } = await db.from("equipment_assets").select("id").eq("project_id", project.id).eq("id", assetId).maybeSingle();
+        const { data: asset } = await db.from("equipment_assets").select("id,category,status").eq("project_id", project.id).eq("id", assetId).maybeSingle();
         if (!asset) return Response.json({ error: "Matériel introuvable." }, { status: 404 });
-        const personId = String(body.personId ?? "") || null; const locationId = String(body.stockLocationId ?? "") || null;
-        const { error: movementError } = await db.from("equipment_movements").insert({ project_id: project.id, asset_id: assetId, movement_type: movementType, person_id: personId, stock_location_id: locationId, note: String(body.note ?? "").trim() || null, created_by: user.id });
+        if (movementType === "affectation" && asset.status !== "disponible") return Response.json({ error: "Cet outil n’est plus disponible." }, { status: 409 });
+        if (movementType === "retour" && asset.status !== "affecte") return Response.json({ error: "Cet outil n’est pas actuellement affecté." }, { status: 409 });
+        const personId = String(body.personId ?? "") || null; const locationId = String(body.stockLocationId ?? "") || null; const zoneId = String(body.zoneId ?? "") || null;
+        const [{ data: person }, { data: location }, { data: zone }] = await Promise.all([
+          personId ? db.from("people").select("id").eq("project_id",project.id).eq("id",personId).eq("active",true).maybeSingle() : Promise.resolve({data:null}),
+          locationId ? db.from("stock_locations").select("id").eq("project_id",project.id).eq("id",locationId).eq("active",true).maybeSingle() : Promise.resolve({data:null}),
+          zoneId ? db.from("zones").select("id").eq("project_id",project.id).eq("id",zoneId).maybeSingle() : Promise.resolve({data:null}),
+        ]);
+        if (movementType === "affectation" && asset.category === "outillage" && (!person || !zone)) return Response.json({ error: "Sélectionnez une personne et une zone pour la sortie de l’outil." }, { status: 400 });
+        if (["retour","transfert","remise_service"].includes(movementType) && !location) return Response.json({ error: "Sélectionnez un emplacement magasin." }, { status: 400 });
+        const { error: movementError } = await db.from("equipment_movements").insert({ project_id: project.id, asset_id: assetId, movement_type: movementType, person_id: person?.id ?? null, stock_location_id: location?.id ?? null, zone_id: zone?.id ?? null, note: String(body.note ?? "").trim() || null, created_by: user.id });
         if (movementError) throw movementError;
-        const { error } = await db.from("equipment_assets").update({ status: nextStatus[movementType], person_id: movementType === "affectation" ? personId : null, stock_location_id: locationId, rental_actual_end_date: movementType === "restitution" ? new Date().toISOString().slice(0, 10) : undefined, updated_by: user.id, updated_at: new Date().toISOString() }).eq("id", assetId);
+        const { error } = await db.from("equipment_assets").update({ status: nextStatus[movementType], person_id: movementType === "affectation" ? person?.id ?? null : null, stock_location_id: movementType === "affectation" ? null : location?.id ?? null, rental_actual_end_date: movementType === "restitution" ? new Date().toISOString().slice(0, 10) : undefined, updated_by: user.id, updated_at: new Date().toISOString() }).eq("id", assetId);
         if (error) throw error;
       } else {
         const assetId = String(body.assetId ?? ""); const documentType = String(body.documentType); const storagePath = String(body.storagePath ?? ""); const fileName = String(body.fileName ?? "").trim();
@@ -256,6 +265,18 @@ export async function POST(request: Request) {
         const { error } = await db.from("equipment_documents").insert({ project_id: project.id, asset_id: assetId, document_type: documentType, file_name: fileName, storage_path: storagePath, uploaded_by: user.id });
         if (error) throw error;
       }
+    } else if (body.kind === "extra-work-create" || body.kind === "extra-work-update") {
+      const { data: profile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
+      if (!profile || !["administrateur","bureau","conducteur","chef_chantier"].includes(profile.role)) return Response.json({ error: "Vous n’êtes pas autorisé à gérer les travaux supplémentaires." }, { status: 403 });
+      const subject = String(body.subject ?? "").trim(); const hours = body.hours === null || body.hours === "" ? null : Number(body.hours); const materials = String(body.materials ?? "").trim() || null; const comments = String(body.comments ?? "").trim() || null;
+      if (!subject || subject.length > 300 || (hours !== null && (!Number.isFinite(hours) || hours < 0))) return Response.json({ error: "L’objet est obligatoire et le volume d’heures doit être positif." }, { status: 400 });
+      const values = { subject, hours, materials, comments, updated_by:user.id, updated_at:new Date().toISOString() };
+      const result = body.kind === "extra-work-create"
+        ? await db.from("extra_works").insert({...values,project_id:project.id,created_by:user.id}).select("id").single()
+        : await db.from("extra_works").update(values).eq("project_id",project.id).eq("id",String(body.extraWorkId ?? "")).select("id").single();
+      if (result.error) throw result.error;
+      await db.from("audit_events").insert({project_id:project.id,action:String(body.kind),entity_type:"extra_work",entity_id:result.data.id,payload:{subject,hours,materials,comments},actor_id:user.id});
+      return Response.json({ok:true,extraWork:result.data});
     } else if (body.kind === "stock-item-create" || body.kind === "stock-item-update") {
       const { data: profile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
       if (!profile || !["administrateur", "bureau", "magasinier"].includes(profile.role)) return Response.json({ error: "Vous n’êtes pas autorisé à gérer le catalogue de stock." }, { status: 403 });
