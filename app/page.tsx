@@ -267,12 +267,12 @@ const stockItems = [
 const personnelNav = [
   ["presence", "✓", "Présence du matin"],
   ["pointage", "◷", "Pointage journalier"],
+  ["equipes", "♙", "Équipes"],
   ["interim", "▣", "Intérim & feuilles"],
 ] as [View, string, string][];
 
 const nav = [
   ["dashboard", "⌂", "Vue d’ensemble"],
-  ["equipes", "♙", "Équipes"],
   ["taches", "▤", "Tâches & budgets"],
   ["zones", "⌖", "Zones de travail"],
   ["stock", "▦", "Suivi de stock"],
@@ -1791,7 +1791,7 @@ function Interim({ accessToken, workDate, projectIdentity, toast }: { accessToke
   async function generate(agencyId: string) { setSaving(true); setError(""); try { await send({ kind: "timesheet-generate", agencyId, weekStart }); toast(`Feuille de la semaine ${weekNumber} générée`); await load(); } catch (e) { setError(e instanceof Error ? e.message : "Erreur"); } finally { setSaving(false); } }
   async function validateSheet() { if (!selectedAgencyId) return; setSaving(true); setError(""); try { await send({ kind: "timesheet-status", agencyId: selectedAgencyId, weekStart }); toast("Validation de la feuille enregistrée"); await load(); } catch (e) { setError(e instanceof Error ? e.message : "Erreur"); } finally { setSaving(false); } }
   async function downloadPdf() {
-    if (!selectedAgencyId || !currentSheet?.snapshot) return;
+    if (!selectedAgencyId || !currentSheet) return;
     setSaving(true); setError("");
     try {
       const response = await fetch(`/api/timesheets/pdf?agencyId=${encodeURIComponent(selectedAgencyId)}&weekStart=${encodeURIComponent(weekStart)}`, { headers: { authorization: `Bearer ${accessToken}` } });
@@ -1876,7 +1876,7 @@ function Interim({ accessToken, workDate, projectIdentity, toast }: { accessToke
                 {agencyHistory.map((sheet) => <option key={sheet.week_start} value={sheet.week_start}>S{sheet.snapshot?.weekNumber ?? isoWeekNumber(new Date(`${sheet.week_start}T12:00:00`))} · {new Date(`${sheet.week_start}T12:00:00`).toLocaleDateString("fr-FR")} · {sheet.status === "bureau_validated" ? "Validée bureau" : sheet.status === "conducteur_validated" ? "Validée conducteur" : "Générée"}</option>)}
               </select>
             </label>
-            <button disabled={!currentSheet?.snapshot || saving} onClick={() => void downloadPdf()}>Télécharger le PDF</button>
+            <button disabled={!currentSheet || saving} onClick={() => void downloadPdf()}>Télécharger le PDF</button>
           </div>
           <div className="sheet-layout">
             <div className="panel agency-selector">
@@ -1970,7 +1970,7 @@ function Interim({ accessToken, workDate, projectIdentity, toast }: { accessToke
                   </b>
                 </span>
                 <div>
-                  <button disabled={!currentSheet?.snapshot || saving} onClick={() => void downloadPdf()}>
+                  <button disabled={!currentSheet || saving} onClick={() => void downloadPdf()}>
                     Télécharger le PDF
                   </button>
                   <button
