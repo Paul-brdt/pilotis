@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { isoWeekNumber, type TimesheetSnapshot } from "@/lib/timesheet";
 import { MorningPresence, WorkScheduleSettings } from "@/app/personnel";
+import { StockManager } from "@/app/stock";
 
 type View =
   | "dashboard"
@@ -701,7 +702,7 @@ export default function Home() {
         {view === "zones" && (
           <Zones accessToken={accessToken} toast={toast} />
         )}
-        {view === "stock" && <Stock toast={toast} accessToken={accessToken} />}
+        {view === "stock" && <StockManager toast={toast} accessToken={accessToken} />}
         {view === "cables" && <Cables toast={toast} />}
         {view === "settings" && (
           <Settings
