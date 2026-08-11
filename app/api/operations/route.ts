@@ -210,6 +210,52 @@ export async function POST(request: Request) {
       if (!task || !zone || (activePeople?.length ?? 0) !== personIds.length) return Response.json({ error: "Une personne, une tâche ou une zone n’est plus disponible." }, { status: 400 });
       const { error } = await db.from("time_entries").insert(personIds.map(personId => ({ project_id: project.id, person_id: personId, task_id: taskId, zone_id: zoneId, work_date: workDate, hours, comment: String(body.comment || ""), created_by: user.id })));
       if (error) throw error;
+    } else if (["rental-agency-create", "rental-agency-active", "equipment-create", "equipment-update", "equipment-movement", "equipment-document", "equipment-warning-settings"].includes(String(body.kind))) {
+      const { data: profile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
+      if (!profile || !["administrateur", "bureau", "magasinier"].includes(profile.role)) return Response.json({ error: "Vous n’êtes pas autorisé à gérer le magasin." }, { status: 403 });
+      if (body.kind === "rental-agency-create") {
+        const name = String(body.name ?? "").trim();
+        if (!name) return Response.json({ error: "Le nom du loueur est obligatoire." }, { status: 400 });
+        const { error } = await db.from("rental_agencies").insert({ project_id: project.id, name, contact_name: String(body.contactName ?? "").trim() || null, phone: String(body.phone ?? "").trim() || null, email: String(body.email ?? "").trim() || null, created_by: user.id });
+        if (error) { if (error.code === "23505") return Response.json({ error: "Cette agence existe déjà." }, { status: 409 }); throw error; }
+      } else if (body.kind === "rental-agency-active") {
+        const { error } = await db.from("rental_agencies").update({ active: Boolean(body.active) }).eq("project_id", project.id).eq("id", String(body.agencyId ?? ""));
+        if (error) throw error;
+      } else if (body.kind === "equipment-warning-settings") {
+        const warningDays = Number(body.warningDays);
+        if (!Number.isInteger(warningDays) || warningDays < 1 || warningDays > 365) return Response.json({ error: "Le délai doit être compris entre 1 et 365 jours." }, { status: 400 });
+        const { error } = await db.from("projects").update({ vic_warning_days: warningDays }).eq("id", project.id);
+        if (error) throw error;
+      } else if (body.kind === "equipment-create" || body.kind === "equipment-update") {
+        const category = String(body.category); const accessType = String(body.accessType || "") || null; const internalReference = String(body.internalReference ?? "").trim().toUpperCase(); const description = String(body.description ?? "").trim(); const status = String(body.status);
+        const validStatuses = ["disponible", "affecte", "maintenance", "hors_service", "restitue"];
+        if (!["engin", "outillage", "acces"].includes(category) || (category === "acces" && !["pirl", "echafaudage"].includes(String(accessType))) || (category !== "acces" && accessType) || !internalReference || !description || !validStatuses.includes(status)) return Response.json({ error: "Les informations du matériel sont invalides." }, { status: 400 });
+        const date = (value: unknown) => /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? "")) ? String(value) : null;
+        const rentalCost = body.rentalCost === null || body.rentalCost === "" ? null : Number(body.rentalCost);
+        if (rentalCost !== null && (!Number.isFinite(rentalCost) || rentalCost < 0)) return Response.json({ error: "Le coût de location est invalide." }, { status: 400 });
+        const values = { category, access_type: accessType, internal_reference: internalReference, rental_reference: String(body.rentalReference ?? "").trim() || null, rental_agency_id: String(body.rentalAgencyId ?? "") || null, brand: String(body.brand ?? "").trim() || null, description, serial_number: String(body.serialNumber ?? "").trim() || null, rental_start_date: date(body.rentalStartDate), rental_planned_end_date: date(body.rentalPlannedEndDate), rental_actual_end_date: date(body.rentalActualEndDate), rental_contract_number: String(body.rentalContractNumber ?? "").trim() || null, rental_cost: rentalCost, rental_cost_frequency: ["jour", "mois"].includes(String(body.rentalCostFrequency)) ? String(body.rentalCostFrequency) : null, vic_date: date(body.vicDate), vic_due_date: date(body.vicDueDate), status, stock_location_id: String(body.stockLocationId ?? "") || null, person_id: String(body.personId ?? "") || null, notes: String(body.notes ?? "").trim() || null, active: Boolean(body.active), updated_by: user.id, updated_at: new Date().toISOString() };
+        const result = body.kind === "equipment-create" ? await db.from("equipment_assets").insert({ ...values, project_id: project.id, created_by: user.id }).select("id").single() : await db.from("equipment_assets").update(values).eq("project_id", project.id).eq("id", String(body.assetId ?? "")).select("id").single();
+        if (result.error) { if (result.error.code === "23505") return Response.json({ error: "Cette référence interne existe déjà." }, { status: 409 }); throw result.error; }
+        return Response.json({ ok: true, asset: result.data });
+      } else if (body.kind === "equipment-movement") {
+        const assetId = String(body.assetId ?? ""); const movementType = String(body.movementType);
+        const nextStatus: Record<string, string> = { affectation: "affecte", retour: "disponible", transfert: "disponible", maintenance: "maintenance", remise_service: "disponible", restitution: "restitue" };
+        if (!nextStatus[movementType]) return Response.json({ error: "Mouvement de matériel invalide." }, { status: 400 });
+        const { data: asset } = await db.from("equipment_assets").select("id").eq("project_id", project.id).eq("id", assetId).maybeSingle();
+        if (!asset) return Response.json({ error: "Matériel introuvable." }, { status: 404 });
+        const personId = String(body.personId ?? "") || null; const locationId = String(body.stockLocationId ?? "") || null;
+        const { error: movementError } = await db.from("equipment_movements").insert({ project_id: project.id, asset_id: assetId, movement_type: movementType, person_id: personId, stock_location_id: locationId, note: String(body.note ?? "").trim() || null, created_by: user.id });
+        if (movementError) throw movementError;
+        const { error } = await db.from("equipment_assets").update({ status: nextStatus[movementType], person_id: movementType === "affectation" ? personId : null, stock_location_id: locationId, rental_actual_end_date: movementType === "restitution" ? new Date().toISOString().slice(0, 10) : undefined, updated_by: user.id, updated_at: new Date().toISOString() }).eq("id", assetId);
+        if (error) throw error;
+      } else {
+        const assetId = String(body.assetId ?? ""); const documentType = String(body.documentType); const storagePath = String(body.storagePath ?? ""); const fileName = String(body.fileName ?? "").trim();
+        if (!["contrat_location", "rapport_vic", "rapport_verification", "photo", "autre"].includes(documentType) || !storagePath.startsWith(`${project.id}/${assetId}/`) || !fileName) return Response.json({ error: "Document invalide." }, { status: 400 });
+        const { data: asset } = await db.from("equipment_assets").select("id").eq("project_id", project.id).eq("id", assetId).maybeSingle();
+        if (!asset) return Response.json({ error: "Matériel introuvable." }, { status: 404 });
+        const { error } = await db.from("equipment_documents").insert({ project_id: project.id, asset_id: assetId, document_type: documentType, file_name: fileName, storage_path: storagePath, uploaded_by: user.id });
+        if (error) throw error;
+      }
     } else if (body.kind === "stock-item-create" || body.kind === "stock-item-update") {
       const { data: profile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
       if (!profile || !["administrateur", "bureau", "magasinier"].includes(profile.role)) return Response.json({ error: "Vous n’êtes pas autorisé à gérer le catalogue de stock." }, { status: 403 });
