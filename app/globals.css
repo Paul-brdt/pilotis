@@ -1280,6 +1280,7 @@ header h1 {
 .mobile-menu {
   display: none;
 }
+.sidebar-mobile-close,.mobile-menu-backdrop { display:none; }
 .content {
   padding: 29px 34px 45px;
   max-width: 1500px;
@@ -2150,6 +2151,31 @@ td .avatar {
   .sidebar {
     display: none;
   }
+  .sidebar.mobile-open {
+    display: flex;
+    width: min(86vw, 300px);
+    z-index: 70;
+    box-shadow: 18px 0 45px #071c1766;
+    animation: mobile-sidebar-in .2s ease-out;
+  }
+  .sidebar-mobile-close {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    margin-left: auto;
+    place-items: center;
+    color: #fff;
+    font-size: 25px;
+    line-height: 1;
+  }
+  .mobile-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 65;
+    display: block;
+    border: 0;
+    background: #071c1799;
+  }
   .workspace {
     margin: 0;
     width: 100%;
@@ -2261,6 +2287,7 @@ td .avatar {
     gap: 8px;
   }
 }
+@keyframes mobile-sidebar-in { from { transform:translateX(-100%); } to { transform:translateX(0); } }
 /* Supabase authentication */
 .auth-screen {
   min-height: 100vh;
