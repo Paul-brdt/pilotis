@@ -2632,6 +2632,29 @@ td .avatar {
 .stock-filters select { min-width:150px; border:1px solid #d7dfdb; border-radius:4px; padding:9px 10px; background:#fff; color:#40534c; font-size:9px; }
 .add-stock-item { align-self:flex-start; margin:-7px 0 11px; }
 .stock-negative-warning { margin:0 0 12px; padding:10px; border-radius:4px; background:#fff2ed; color:#9e5039; font-size:9px; }
+.stock-four-tabs { grid-template-columns:repeat(4,1fr); }
+.stock-four-tabs button { padding:11px 5px; font-size:8px; }
+.stock-muted { color:#8b9692; }
+.stock-active-check { flex-direction:row!important; align-items:center; gap:8px; }
+.stock-active-check input { width:18px!important; height:18px; }
+.stock-detail { width:min(760px,calc(100vw - 32px)); max-height:90vh; overflow:auto; }
+.stock-detail-actions { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; color:var(--muted); font-size:9px; }
+.location-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:20px; }
+.location-cards div { padding:12px; border:1px solid var(--line); border-radius:5px; background:#f8faf9; }
+.location-cards span,.location-cards b { display:block; }
+.location-cards span { color:var(--muted); font-size:8px; margin-bottom:5px; }
+.location-cards b { font:600 17px Georgia; color:var(--ink); }
+.stock-detail h4 { margin:18px 0 10px; font-size:10px; color:var(--ink); }
+.stock-chart { height:170px; display:flex; align-items:flex-end; gap:8px; padding:18px 12px 22px; border:1px solid var(--line); border-radius:5px; background:linear-gradient(to top,#edf2ef 1px,transparent 1px); background-size:100% 25%; }
+.stock-chart-column { position:relative; flex:1; height:100%; display:flex; align-items:center; justify-content:flex-end; flex-direction:column; }
+.stock-chart-column div { width:100%; max-width:36px; min-height:3px; background:#397f68; border-radius:3px 3px 0 0; }
+.stock-chart-column span { margin-bottom:3px; font-size:7px; color:#52665f; }
+.stock-chart-column small { position:absolute; top:calc(100% + 5px); font-size:7px; color:var(--muted); }
+.stock-detail-history { border-top:1px solid var(--line); }
+.stock-detail-history div { display:grid; grid-template-columns:90px 1fr 90px; gap:10px; padding:9px 0; border-bottom:1px solid #edf0ee; font-size:9px; }
+.stock-detail-history strong { text-align:right; }
+.move-transfert { color:#3c6685; }.move-inventaire { color:#8b692a; }
+@media (max-width:700px) { .stock-four-tabs { grid-template-columns:repeat(2,1fr); }.stock-detail-history div { grid-template-columns:70px 1fr 70px; } }
 .overtime-field { display:flex; flex-direction:column; gap:3px; }
 .overtime-field input { width:100%; }
 .overtime-field small { color:#9a6e25; }
