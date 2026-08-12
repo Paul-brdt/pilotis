@@ -87,13 +87,13 @@ export async function POST(request: Request) {
         const monday = new Date(`${weekStart}T12:00:00Z`);
         const days = Array.from({ length: 7 }, (_, index) => { const date = new Date(monday); date.setUTCDate(monday.getUTCDate() + index); return { date: date.toISOString().slice(0, 10), label: date.toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", timeZone: "UTC" }).toUpperCase() }; });
         const weekEnd = days[6].date;
-        const [{ data: people }, { data: entries }, { data: projectDetails }] = await Promise.all([
+        const [{ data: people }, { data: attendance }, { data: projectDetails }] = await Promise.all([
           db.from("people").select("id,full_name,qualification,coefficient").eq("project_id", project.id).eq("agency_id", agencyId).eq("contract_type", "interimaire").order("full_name"),
-          db.from("time_entries").select("person_id,work_date,hours").eq("project_id", project.id).gte("work_date", weekStart).lte("work_date", weekEnd),
+          db.from("daily_attendance").select("person_id,work_date,status,regular_hours,automatic_overtime_hours,manual_overtime_hours").eq("project_id", project.id).gte("work_date", weekStart).lte("work_date", weekEnd),
           db.from("projects").select("name,code,location").eq("id", project.id).single(),
         ]);
         const workers = (people ?? []).map((person) => {
-          const hours = days.map((day) => (entries ?? []).filter((entry) => entry.person_id === person.id && entry.work_date === day.date).reduce((sum, entry) => sum + Number(entry.hours), 0));
+          const hours = days.map((day) => (attendance ?? []).filter((row) => row.person_id === person.id && row.work_date === day.date && row.status === "present").reduce((sum, row) => sum + Number(row.regular_hours) + Number(row.manual_overtime_hours ?? row.automatic_overtime_hours), 0));
           return { id: person.id, name: person.full_name, qualification: person.qualification, coefficient: person.coefficient, hours, total: hours.reduce((sum, value) => sum + value, 0), meals: hours.filter((value) => value > 5).length };
         });
         const snapshot: TimesheetSnapshot = {
