@@ -57,7 +57,7 @@ export async function POST(request: Request) {
           : await db.from("people").update(values).eq("id", personId).eq("project_id", project.id);
         if (result.error) throw result.error;
       }
-    } else if (["agency-create", "agency-update", "qualification-create", "qualification-active", "timesheet-generate", "timesheet-status"].includes(String(body.kind))) {
+    } else if (["agency-create", "agency-update", "qualification-create", "qualification-update", "qualification-delete", "qualification-active", "timesheet-generate", "timesheet-status"].includes(String(body.kind))) {
       const { data: profile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
       if (!profile || !["administrateur", "bureau", "conducteur"].includes(profile.role)) return Response.json({ error: "Vous n’êtes pas autorisé à gérer l’intérim." }, { status: 403 });
       if (body.kind === "agency-create" || body.kind === "agency-update") {
@@ -73,7 +73,34 @@ export async function POST(request: Request) {
       } else if (body.kind === "qualification-create") {
         const name = String(body.name ?? "").trim();
         if (!name) return Response.json({ error: "Le nom de la qualification est obligatoire." }, { status: 400 });
+        const { data: duplicate } = await db.from("qualifications").select("id").eq("project_id", project.id).ilike("name", name).maybeSingle();
+        if (duplicate) return Response.json({ error: "Cette qualification existe déjà." }, { status: 409 });
         const { error } = await db.from("qualifications").insert({ project_id: project.id, name });
+        if (error) throw error;
+      } else if (body.kind === "qualification-update") {
+        const qualificationId = String(body.qualificationId ?? "");
+        const name = String(body.name ?? "").trim();
+        if (!qualificationId || !name) return Response.json({ error: "Qualification invalide." }, { status: 400 });
+        const [{ data: qualification }, { data: duplicate }] = await Promise.all([
+          db.from("qualifications").select("id,name").eq("id", qualificationId).eq("project_id", project.id).maybeSingle(),
+          db.from("qualifications").select("id").eq("project_id", project.id).ilike("name", name).neq("id", qualificationId).maybeSingle(),
+        ]);
+        if (!qualification) return Response.json({ error: "Qualification introuvable." }, { status: 404 });
+        if (duplicate) return Response.json({ error: "Cette qualification existe déjà." }, { status: 409 });
+        const { error: qualificationError } = await db.from("qualifications").update({ name }).eq("id", qualificationId).eq("project_id", project.id);
+        if (qualificationError) throw qualificationError;
+        const { error: peopleError } = await db.from("people").update({ qualification: name }).eq("project_id", project.id).eq("qualification", qualification.name);
+        if (peopleError) {
+          await db.from("qualifications").update({ name: qualification.name }).eq("id", qualificationId).eq("project_id", project.id);
+          throw peopleError;
+        }
+      } else if (body.kind === "qualification-delete") {
+        const qualificationId = String(body.qualificationId ?? "");
+        const { data: qualification } = await db.from("qualifications").select("id,name").eq("id", qualificationId).eq("project_id", project.id).maybeSingle();
+        if (!qualification) return Response.json({ error: "Qualification introuvable." }, { status: 404 });
+        const { count } = await db.from("people").select("id", { count: "exact", head: true }).eq("project_id", project.id).eq("qualification", qualification.name);
+        if ((count ?? 0) > 0) return Response.json({ error: `Impossible de supprimer cette qualification : elle est utilisée par ${count} personne(s). Modifiez d’abord leurs fiches.` }, { status: 409 });
+        const { error } = await db.from("qualifications").delete().eq("id", qualificationId).eq("project_id", project.id);
         if (error) throw error;
       } else if (body.kind === "qualification-active") {
         const { error } = await db.from("qualifications").update({ active: Boolean(body.active) }).eq("id", String(body.qualificationId ?? "")).eq("project_id", project.id);

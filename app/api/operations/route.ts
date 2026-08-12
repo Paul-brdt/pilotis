@@ -57,7 +57,7 @@ export async function POST(request: Request) {
           : await db.from("people").update(values).eq("id", personId).eq("project_id", project.id);
         if (result.error) throw result.error;
       }
-    } else if (["agency-create", "agency-update", "qualification-create", "qualification-active", "timesheet-generate", "timesheet-status"].includes(String(body.kind))) {
+    } else if (["agency-create", "agency-update", "qualification-create", "qualification-update", "qualification-delete", "qualification-active", "timesheet-generate", "timesheet-status"].includes(String(body.kind))) {
       const { data: profile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
       if (!profile || !["administrateur", "bureau", "conducteur"].includes(profile.role)) return Response.json({ error: "Vous n’êtes pas autorisé à gérer l’intérim." }, { status: 403 });
       if (body.kind === "agency-create" || body.kind === "agency-update") {
@@ -73,7 +73,34 @@ export async function POST(request: Request) {
       } else if (body.kind === "qualification-create") {
         const name = String(body.name ?? "").trim();
         if (!name) return Response.json({ error: "Le nom de la qualification est obligatoire." }, { status: 400 });
+        const { data: duplicate } = await db.from("qualifications").select("id").eq("project_id", project.id).ilike("name", name).maybeSingle();
+        if (duplicate) return Response.json({ error: "Cette qualification existe déjà." }, { status: 409 });
         const { error } = await db.from("qualifications").insert({ project_id: project.id, name });
+        if (error) throw error;
+      } else if (body.kind === "qualification-update") {
+        const qualificationId = String(body.qualificationId ?? "");
+        const name = String(body.name ?? "").trim();
+        if (!qualificationId || !name) return Response.json({ error: "Qualification invalide." }, { status: 400 });
+        const [{ data: qualification }, { data: duplicate }] = await Promise.all([
+          db.from("qualifications").select("id,name").eq("id", qualificationId).eq("project_id", project.id).maybeSingle(),
+          db.from("qualifications").select("id").eq("project_id", project.id).ilike("name", name).neq("id", qualificationId).maybeSingle(),
+        ]);
+        if (!qualification) return Response.json({ error: "Qualification introuvable." }, { status: 404 });
+        if (duplicate) return Response.json({ error: "Cette qualification existe déjà." }, { status: 409 });
+        const { error: qualificationError } = await db.from("qualifications").update({ name }).eq("id", qualificationId).eq("project_id", project.id);
+        if (qualificationError) throw qualificationError;
+        const { error: peopleError } = await db.from("people").update({ qualification: name }).eq("project_id", project.id).eq("qualification", qualification.name);
+        if (peopleError) {
+          await db.from("qualifications").update({ name: qualification.name }).eq("id", qualificationId).eq("project_id", project.id);
+          throw peopleError;
+        }
+      } else if (body.kind === "qualification-delete") {
+        const qualificationId = String(body.qualificationId ?? "");
+        const { data: qualification } = await db.from("qualifications").select("id,name").eq("id", qualificationId).eq("project_id", project.id).maybeSingle();
+        if (!qualification) return Response.json({ error: "Qualification introuvable." }, { status: 404 });
+        const { count } = await db.from("people").select("id", { count: "exact", head: true }).eq("project_id", project.id).eq("qualification", qualification.name);
+        if ((count ?? 0) > 0) return Response.json({ error: `Impossible de supprimer cette qualification : elle est utilisée par ${count} personne(s). Modifiez d’abord leurs fiches.` }, { status: 409 });
+        const { error } = await db.from("qualifications").delete().eq("id", qualificationId).eq("project_id", project.id);
         if (error) throw error;
       } else if (body.kind === "qualification-active") {
         const { error } = await db.from("qualifications").update({ active: Boolean(body.active) }).eq("id", String(body.qualificationId ?? "")).eq("project_id", project.id);
@@ -281,9 +308,9 @@ export async function POST(request: Request) {
       const { data: profile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
       if (!profile || !["administrateur", "bureau", "magasinier"].includes(profile.role)) return Response.json({ error: "Vous n’êtes pas autorisé à gérer le catalogue de stock." }, { status: 403 });
       const reference = String(body.reference ?? "").trim().toUpperCase(); const name = String(body.name ?? "").trim(); const category = String(body.category ?? ""); const unit = String(body.unit ?? ""); const minimumQuantity = Number(body.minimumQuantity ?? 0);
-      const validCategories = ["Câble", "Cheminements", "Luminaires", "Supportage", "Boulonnerie", "Colliers", "Galva"];
       const validUnits = ["u", "m", "ml", "kg", "l", "boîte", "paquet"];
-      if (!reference || !name || !validCategories.includes(category) || !validUnits.includes(unit) || !Number.isFinite(minimumQuantity) || minimumQuantity < 0) return Response.json({ error: "Les informations de l’article sont invalides." }, { status: 400 });
+      const { data: validFamily } = await db.from("stock_families").select("id").eq("project_id", project.id).eq("name", category).eq("active", true).maybeSingle();
+      if (!reference || !name || !validFamily || !validUnits.includes(unit) || !Number.isFinite(minimumQuantity) || minimumQuantity < 0) return Response.json({ error: "Les informations de l’article sont invalides." }, { status: 400 });
       const values = { reference, name, category, unit, minimum_quantity: minimumQuantity, active: Boolean(body.active ?? true) };
       const result = body.kind === "stock-item-create"
         ? await db.from("stock_items").insert({ ...values, project_id: project.id, ordered_quantity: 0, received_quantity: 0 }).select("id,reference").single()
@@ -292,14 +319,45 @@ export async function POST(request: Request) {
       if (error) { if (error.code === "23505") return Response.json({ error: "Cette référence existe déjà." }, { status: 409 }); throw error; }
       await db.from("audit_events").insert({ project_id: project.id, action: "stock-item-create", entity_type: "stock_item", entity_id: item.id, payload: { reference, name, category, unit, minimumQuantity }, actor_id: user.id });
       return Response.json({ ok: true, item });
-    } else if (body.kind === "stock-location-create") {
+    } else if (["stock-location-create", "stock-location-update", "stock-location-delete"].includes(String(body.kind))) {
       const { data: profile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
       if (!profile || !["administrateur", "bureau", "magasinier"].includes(profile.role)) return Response.json({ error: "Vous n’êtes pas autorisé à gérer les emplacements." }, { status: 403 });
+      const locationId = String(body.locationId ?? "");
+      if (body.kind === "stock-location-delete") {
+        const [{ count: sourceCount }, { count: destinationCount }, { count: assetCount }, { count: equipmentMovementCount }] = await Promise.all([
+          db.from("stock_movements").select("id", { count:"exact", head:true }).eq("project_id",project.id).eq("source_location_id",locationId),
+          db.from("stock_movements").select("id", { count:"exact", head:true }).eq("project_id",project.id).eq("destination_location_id",locationId),
+          db.from("equipment_assets").select("id", { count:"exact", head:true }).eq("project_id",project.id).eq("stock_location_id",locationId),
+          db.from("equipment_movements").select("id", { count:"exact", head:true }).eq("project_id",project.id).eq("stock_location_id",locationId),
+        ]);
+        if ((sourceCount??0)+(destinationCount??0)+(assetCount??0)+(equipmentMovementCount??0)>0) return Response.json({error:"Impossible de supprimer cet emplacement : il est utilisé par le stock ou son historique. Désactivez-le plutôt."},{status:409});
+        const {error}=await db.from("stock_locations").delete().eq("project_id",project.id).eq("id",locationId); if(error)throw error;
+        return Response.json({ok:true});
+      }
       const name = String(body.name ?? "").trim(); const code = String(body.code ?? "").trim().toUpperCase() || null;
       if (!name) return Response.json({ error: "Le nom de l’emplacement est obligatoire." }, { status: 400 });
-      const { data: location, error } = await db.from("stock_locations").insert({ project_id: project.id, name, code, created_by: user.id }).select("id,name").single();
+      const result=body.kind==="stock-location-create"?db.from("stock_locations").insert({project_id:project.id,name,code,created_by:user.id}):db.from("stock_locations").update({name,code,active:Boolean(body.active)}).eq("project_id",project.id).eq("id",locationId);
+      const { data: location, error } = await result.select("id,name").single();
       if (error) { if (error.code === "23505") return Response.json({ error: "Cet emplacement existe déjà." }, { status: 409 }); throw error; }
       return Response.json({ ok: true, location });
+    } else if (["stock-family-create", "stock-family-update", "stock-family-delete"].includes(String(body.kind))) {
+      const {data:profile}=await db.from("profiles").select("role").eq("id",user.id).maybeSingle();
+      if(!profile||!["administrateur","bureau","magasinier"].includes(profile.role))return Response.json({error:"Vous n’êtes pas autorisé à gérer les familles."},{status:403});
+      const familyId=String(body.familyId??"");
+      if(body.kind==="stock-family-delete"){
+        const {data:stockFamily}=await db.from("stock_families").select("id,name").eq("project_id",project.id).eq("id",familyId).maybeSingle();
+        if(!stockFamily)return Response.json({error:"Famille introuvable."},{status:404});
+        const {count}=await db.from("stock_items").select("id",{count:"exact",head:true}).eq("project_id",project.id).eq("category",stockFamily.name);
+        if((count??0)>0)return Response.json({error:`Impossible de supprimer cette famille : elle contient ${count} article(s). Modifiez d’abord leurs fiches.`},{status:409});
+        const {error}=await db.from("stock_families").delete().eq("project_id",project.id).eq("id",familyId);if(error)throw error;return Response.json({ok:true});
+      }
+      const name=String(body.name??"").trim();if(!name)return Response.json({error:"Le nom de la famille est obligatoire."},{status:400});
+      if(body.kind==="stock-family-create"){
+        const {data,error}=await db.from("stock_families").insert({project_id:project.id,name,created_by:user.id}).select("id,name").single();if(error){if(error.code==="23505")return Response.json({error:"Cette famille existe déjà."},{status:409});throw error}return Response.json({ok:true,family:data});
+      }
+      const {data:stockFamily}=await db.from("stock_families").select("id,name").eq("project_id",project.id).eq("id",familyId).maybeSingle();if(!stockFamily)return Response.json({error:"Famille introuvable."},{status:404});
+      const {error:updateError}=await db.from("stock_families").update({name,active:Boolean(body.active),updated_at:new Date().toISOString()}).eq("project_id",project.id).eq("id",familyId);if(updateError){if(updateError.code==="23505")return Response.json({error:"Cette famille existe déjà."},{status:409});throw updateError}
+      const {error:itemError}=await db.from("stock_items").update({category:name}).eq("project_id",project.id).eq("category",stockFamily.name);if(itemError){await db.from("stock_families").update({name:stockFamily.name}).eq("id",familyId);throw itemError}return Response.json({ok:true});
     } else if (body.kind === "stock") {
       const { data: profile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
       if (!profile || !["administrateur", "bureau", "magasinier"].includes(profile.role)) return Response.json({ error: "Vous n’êtes pas autorisé à enregistrer des mouvements de stock." }, { status: 403 });
