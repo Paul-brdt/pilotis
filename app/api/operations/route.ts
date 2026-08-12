@@ -272,15 +272,14 @@ export async function POST(request: Request) {
         if (!asset) return Response.json({ error: "Matériel introuvable." }, { status: 404 });
         if (movementType === "affectation" && asset.status !== "disponible") return Response.json({ error: "Cet outil n’est plus disponible." }, { status: 409 });
         if (movementType === "retour" && asset.status !== "affecte") return Response.json({ error: "Cet outil n’est pas actuellement affecté." }, { status: 409 });
-        const personId = String(body.personId ?? "") || null; const locationId = String(body.stockLocationId ?? "") || null; const zoneId = String(body.zoneId ?? "") || null;
-        const [{ data: person }, { data: location }, { data: zone }] = await Promise.all([
+        const personId = String(body.personId ?? "") || null; const locationId = String(body.stockLocationId ?? "") || null;
+        const [{ data: person }, { data: location }] = await Promise.all([
           personId ? db.from("people").select("id").eq("project_id",project.id).eq("id",personId).eq("active",true).maybeSingle() : Promise.resolve({data:null}),
           locationId ? db.from("stock_locations").select("id").eq("project_id",project.id).eq("id",locationId).eq("active",true).maybeSingle() : Promise.resolve({data:null}),
-          zoneId ? db.from("zones").select("id").eq("project_id",project.id).eq("id",zoneId).maybeSingle() : Promise.resolve({data:null}),
         ]);
         if (movementType === "affectation" && asset.category === "outillage" && !person) return Response.json({ error: "Sélectionnez une personne pour la sortie de l’outil." }, { status: 400 });
         if (["retour","transfert","remise_service"].includes(movementType) && !location) return Response.json({ error: "Sélectionnez un emplacement magasin." }, { status: 400 });
-        const { error: movementError } = await db.from("equipment_movements").insert({ project_id: project.id, asset_id: assetId, movement_type: movementType, person_id: person?.id ?? null, stock_location_id: location?.id ?? null, zone_id: zone?.id ?? null, note: String(body.note ?? "").trim() || null, created_by: user.id });
+        const { error: movementError } = await db.from("equipment_movements").insert({ project_id: project.id, asset_id: assetId, movement_type: movementType, person_id: person?.id ?? null, stock_location_id: location?.id ?? null, zone_id: null, note: String(body.note ?? "").trim() || null, created_by: user.id });
         if (movementError) throw movementError;
         const { error } = await db.from("equipment_assets").update({ status: nextStatus[movementType], person_id: movementType === "affectation" ? person?.id ?? null : null, stock_location_id: movementType === "affectation" ? null : location?.id ?? null, rental_actual_end_date: movementType === "restitution" ? new Date().toISOString().slice(0, 10) : undefined, updated_by: user.id, updated_at: new Date().toISOString() }).eq("id", assetId);
         if (error) throw error;
