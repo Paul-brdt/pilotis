@@ -157,7 +157,13 @@ export async function GET(request: Request) {
     if (error) throw error;
     if (!sheet) return Response.json({ error: "Générez d'abord la feuille pour créer son PDF." }, { status: 404 });
 
-    const snapshot = sheet.snapshot as TimesheetSnapshot | null ?? await rebuildSnapshot(db, project, agencyId, weekStart);
+    const weekEnd = new Date(`${weekStart}T12:00:00Z`);
+    weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);
+    const today = new Date().toISOString().slice(0, 10);
+    const isOpenWeek = weekStart <= today && weekEnd.toISOString().slice(0, 10) >= today;
+    const snapshot = isOpenWeek
+      ? await rebuildSnapshot(db, project, agencyId, weekStart)
+      : sheet.snapshot as TimesheetSnapshot | null ?? await rebuildSnapshot(db, project, agencyId, weekStart);
     if (!snapshot) return Response.json({ error: "Les données de la feuille sont indisponibles." }, { status: 404 });
     if (!sheet.snapshot) await db.from("weekly_timesheets").update({ snapshot, updated_at: new Date().toISOString() }).eq("id", sheet.id);
 
