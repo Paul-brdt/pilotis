@@ -2758,6 +2758,26 @@ td .avatar {
 .stock-detail-history strong { text-align:right; }
 .move-transfert { color:#3c6685; }.move-inventaire { color:#8b692a; }
 .tool-stock-panel { margin-top:15px; }
+.stock-data-panel { overflow:hidden; }
+.stock-data-panel .panel-title { min-height:76px; padding:18px 20px; }
+.stock-data-panel .panel-title h3 { margin-top:5px; }
+.stock-panel-action { padding:8px 12px!important; border:1px solid #b9cec6!important; border-radius:5px!important; background:#eef5f2!important; color:#286b57!important; font-weight:700; }
+.stock-data-panel table { min-width:820px; table-layout:fixed; }
+.tool-stock-panel th:nth-child(1) { width:17%; }.tool-stock-panel th:nth-child(2) { width:37%; }.tool-stock-panel th:nth-child(3) { width:14%; }.tool-stock-panel th:nth-child(4) { width:32%; }
+.stock-movement-panel table { min-width:980px; }
+.stock-movement-panel th:nth-child(1) { width:12%; }.stock-movement-panel th:nth-child(2) { width:14%; }.stock-movement-panel th:nth-child(3) { width:28%; }.stock-movement-panel th:nth-child(4) { width:11%; }.stock-movement-panel th:nth-child(5) { width:23%; }.stock-movement-panel th:nth-child(6) { width:12%; }
+.stock-data-panel th { padding:11px 18px; background:#f4f7f5; color:#6f817a; font-size:7px; }
+.stock-data-panel td { height:62px; padding:12px 18px; vertical-align:middle; color:#263c35; }
+.stock-data-panel tbody tr:hover td { background:#f8fbf9; }
+.stock-item-identity,.stock-assignment { display:flex; min-width:0; flex-direction:column; gap:5px; }
+.stock-item-identity b,.stock-assignment b { overflow:hidden; color:#213a32; font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
+.stock-item-identity small,.stock-assignment small { display:block; color:#82908b; font-size:8px; line-height:1.3; }
+.stock-reference { display:inline-flex; padding:5px 8px; border-radius:4px; background:#edf3f0; color:#315f51; font-size:9px; font-weight:700; letter-spacing:.25px; }
+.stock-date { color:#566a63; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.stock-movement-badge { display:inline-flex; align-items:center; min-height:24px; padding:5px 8px; border-radius:12px; font-size:8px; font-weight:700; white-space:nowrap; }
+.stock-movement-badge.move-sortie { background:#f7edda; color:#8a651d; }.stock-movement-badge.move-entree { background:#e5f1ec; color:#2e745e; }.stock-movement-badge.move-transfert { background:#e5edf4; color:#3c6685; }.stock-movement-badge.move-inventaire { background:#f2eadb; color:#7d6228; }
+.stock-comment { color:#6f7e79; }
+.stock-data-panel .equipment-status { padding:6px 9px; font-weight:700; }
 .extra-works-panel table { min-width:900px; }
 .extra-works-panel tbody tr { cursor:pointer; }
 .extra-works-panel tbody tr:hover { background:#f6faf8; }
