@@ -1812,11 +1812,13 @@ function Interim({ accessToken, workDate, projectIdentity, toast }: { accessToke
     const hours = weekDays.map((date) => attendanceRows.filter((row) => row.person_id === person.id && row.work_date === date.toLocaleDateString("en-CA")).reduce((sum, row) => sum + attendanceHours(row), 0));
     return { person, hours, total: hours.reduce((sum, value) => sum + value, 0), meals: hours.filter((value) => value > 5).length };
   });
-  const displayedSheets = currentSheet?.snapshot?.workers.map((worker) => ({
+  const today = new Date().toLocaleDateString("en-CA");
+  const isOpenWeek = weekStart <= today && weekEnd >= today;
+  const displayedSheets = !isOpenWeek && currentSheet?.snapshot?.workers ? currentSheet.snapshot.workers.map((worker) => ({
     person: { id: worker.id, full_name: worker.name, qualification: worker.qualification, coefficient: worker.coefficient },
     hours: worker.hours, total: worker.total, meals: worker.meals,
-  })) ?? sheets;
-  const displayedDays = currentSheet?.snapshot?.days ?? weekDays.map((date) => ({ date: date.toLocaleDateString("en-CA"), label: date.toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit" }).toUpperCase() }));
+  })) : sheets;
+  const displayedDays = !isOpenWeek && currentSheet?.snapshot?.days ? currentSheet.snapshot.days : weekDays.map((date) => ({ date: date.toLocaleDateString("en-CA"), label: date.toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit" }).toUpperCase() }));
   const agencyHistory = generatedSheets.filter((sheet) => sheet.agency_id === selectedAgencyId);
   const agencyTotals = new Map(agencyRows.map((agency) => { const workers = interimPeople.filter((person) => person.agency_id === agency.id); const total = attendanceRows.filter((row) => workers.some((person) => person.id === row.person_id)).reduce((sum, row) => sum + attendanceHours(row), 0); return [agency.id, total]; }));
   const totalHours = attendanceRows.filter((row) => interimPeople.some((person) => person.id === row.person_id)).reduce((sum, row) => sum + attendanceHours(row), 0);
