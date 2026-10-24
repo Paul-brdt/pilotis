@@ -6,6 +6,9 @@ import {
   type CurrentProfile,
   type ProjectIdentity,
   roleLabel,
+  canAccessView,
+  loginEmail,
+  loginLabel,
 } from "@/app/shared";
 import { Cables } from "@/app/views/cables";
 import { Dashboard } from "@/app/views/dashboard";
@@ -67,6 +70,7 @@ export default function Home() {
   );
   const [projectIdentity, setProjectIdentity] =
     useState<ProjectIdentity | null>(null);
+  const [userEmail, setUserEmail] = useState("");
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
@@ -99,6 +103,7 @@ export default function Home() {
         .eq("code", "24-018")
         .single(),
     ]);
+    setUserEmail(user?.email ?? "");
     setCurrentProfile(profileResult.data as CurrentProfile | null);
     setProjectIdentity(projectResult.data as ProjectIdentity | null);
   }
@@ -109,6 +114,7 @@ export default function Home() {
       else {
         setCurrentProfile(null);
         setProjectIdentity(null);
+        setUserEmail("");
       }
     }, 0);
     return () => window.clearTimeout(timer);
@@ -158,14 +164,9 @@ export default function Home() {
       return;
     }
 
-    if (username.toLowerCase() !== "admin") {
-      setAuthError("Identifiant ou mot de passe incorrect.");
-      return;
-    }
-
     const supabase = createSupabaseBrowserClient();
     const result = await supabase.auth.signInWithPassword({
-      email: "admin@pilotis.internal",
+      email: loginEmail(username),
       password,
     });
     if (result.error) setAuthError("Identifiant ou mot de passe incorrect.");
@@ -207,7 +208,7 @@ export default function Home() {
     setAccountSaving(true);
     const supabase = createSupabaseBrowserClient();
     const verification = await supabase.auth.signInWithPassword({
-      email: "admin@pilotis.internal",
+      email: userEmail,
       password: currentPassword,
     });
     if (verification.error) {
@@ -243,7 +244,7 @@ export default function Home() {
           <h1>PILOTIS</h1>
           <p>Connectez-vous à votre espace chantier.</p>
           <label>
-            Identifiant
+            Identifiant ou e-mail
             <input
               name="username"
               type="text"
@@ -295,6 +296,16 @@ export default function Home() {
     );
   }
 
+  const role = currentProfile?.role;
+  const canSee = (target: View) => canAccessView(role, target);
+  const activeView = canSee(view) ? view : "dashboard";
+  const visiblePersonnelNav = personnelNav.filter(([id]) => canSee(id));
+  const visibleMagasinNav = magasinNav.filter(([id]) => canSee(id));
+  const visibleChantierNav = nav.slice(1).filter(([id]) => canSee(id));
+  function openView(target: View) {
+    if (canSee(target)) setView(target);
+  }
+
   return (
     <main className="app-shell">
       {mobileMenuOpen ? (
@@ -336,94 +347,100 @@ export default function Home() {
             <button
               key={id}
               onClick={() => {
-                setView(id);
+                openView(id);
                 setMobileMenuOpen(false);
               }}
-              className={view === id ? "active" : ""}
+              className={activeView === id ? "active" : ""}
             >
               <i>{icon}</i>
               {label}
             </button>
           ))}
-          <button
-            type="button"
-            className="nav-section-toggle"
-            aria-expanded={openNavSections.personnel}
-            onClick={() =>
-              setOpenNavSections((current) => ({
-                ...current,
-                personnel: !current.personnel,
-              }))
-            }
-          >
-            <span>PERSONNEL</span>
-            <i>{openNavSections.personnel ? "⌃" : "⌄"}</i>
-          </button>
+          {visiblePersonnelNav.length > 0 && (
+            <button
+              type="button"
+              className="nav-section-toggle"
+              aria-expanded={openNavSections.personnel}
+              onClick={() =>
+                setOpenNavSections((current) => ({
+                  ...current,
+                  personnel: !current.personnel,
+                }))
+              }
+            >
+              <span>PERSONNEL</span>
+              <i>{openNavSections.personnel ? "⌃" : "⌄"}</i>
+            </button>
+          )}
           {openNavSections.personnel &&
-            personnelNav.map(([id, icon, label]) => (
+            visiblePersonnelNav.map(([id, icon, label]) => (
               <button
                 key={id}
                 onClick={() => {
-                  setView(id);
+                  openView(id);
                   setMobileMenuOpen(false);
                 }}
-                className={view === id ? "active" : ""}
+                className={activeView === id ? "active" : ""}
               >
                 <i>{icon}</i>
                 {label}
               </button>
             ))}
-          <button
-            type="button"
-            className="nav-section-toggle"
-            aria-expanded={openNavSections.magasin}
-            onClick={() =>
-              setOpenNavSections((current) => ({
-                ...current,
-                magasin: !current.magasin,
-              }))
-            }
-          >
-            <span>MAGASIN</span>
-            <i>{openNavSections.magasin ? "⌃" : "⌄"}</i>
-          </button>
+          {visibleMagasinNav.length > 0 && (
+            <button
+              type="button"
+              className="nav-section-toggle"
+              aria-expanded={openNavSections.magasin}
+              onClick={() =>
+                setOpenNavSections((current) => ({
+                  ...current,
+                  magasin: !current.magasin,
+                }))
+              }
+            >
+              <span>MAGASIN</span>
+              <i>{openNavSections.magasin ? "⌃" : "⌄"}</i>
+            </button>
+          )}
           {openNavSections.magasin &&
-            magasinNav.map(([id, icon, label]) => (
+            visibleMagasinNav.map(([id, icon, label]) => (
               <button
                 key={id}
                 onClick={() => {
-                  setView(id);
+                  openView(id);
                   setMobileMenuOpen(false);
                 }}
-                className={view === id ? "active" : ""}
+                className={activeView === id ? "active" : ""}
               >
                 <i>{icon}</i>
                 {label}
               </button>
             ))}
-          <button
-            type="button"
-            className="nav-section-toggle"
-            aria-expanded={openNavSections.chantier}
-            onClick={() =>
-              setOpenNavSections((current) => ({
-                ...current,
-                chantier: !current.chantier,
-              }))
-            }
-          >
-            <span>CHANTIER</span>
-            <i>{openNavSections.chantier ? "⌃" : "⌄"}</i>
-          </button>
+          {visibleChantierNav.length > 0 && (
+            <button
+              type="button"
+              className="nav-section-toggle"
+              aria-expanded={openNavSections.chantier}
+              onClick={() =>
+                setOpenNavSections((current) => ({
+                  ...current,
+                  chantier: !current.chantier,
+                }))
+              }
+            >
+              <span>CHANTIER</span>
+              <i>{openNavSections.chantier ? "⌃" : "⌄"}</i>
+            </button>
+          )}
           {openNavSections.chantier &&
-            nav.slice(1).map(([id, icon, label]) => (
+            visibleChantierNav.map(([id, icon, label]) => (
               <button
                 key={id}
                 onClick={() => {
-                  setView(id);
+                  openView(id);
                   setMobileMenuOpen(false);
                 }}
-                className={view === id ? "active" : ""}
+                className={activeView === id ? "active" : ""}
               >
                 <i>{icon}</i>
                 {label}
@@ -431,15 +448,17 @@ export default function Home() {
             ))}
         </nav>
         <div className="sidebar-bottom">
-          <button
-            onClick={() => {
-              setView("settings");
-              setMobileMenuOpen(false);
-            }}
-            className={view === "settings" ? "active" : ""}
-          >
-            <i>⚙</i> Paramètres
-          </button>
+          {canSee("settings") && (
+            <button
+              onClick={() => {
+                openView("settings");
+                setMobileMenuOpen(false);
+              }}
+              className={activeView === "settings" ? "active" : ""}
+            >
+              <i>⚙</i> Paramètres
+            </button>
+          )}
           <div className="user" data-account-menu>
             <span>
               {(currentProfile?.full_name ?? "Utilisateur")
@@ -466,19 +485,21 @@ export default function Home() {
               <div className="account-menu" role="menu">
                 <div className="account-menu-profile">
                   <b>{currentProfile?.full_name ?? "Utilisateur"}</b>
-                  <small>Identifiant : admin</small>
+                  <small>Identifiant : {loginLabel(userEmail)}</small>
                   <span>{roleLabel(currentProfile?.role)}</span>
                 </div>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setAccountMenuOpen(false);
-                    setView("settings");
-                  }}
-                >
-                  <i>⚙</i> Paramètres du compte
-                </button>
+                {canSee("settings") && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAccountMenuOpen(false);
+                      openView("settings");
+                    }}
+                  >
+                    <i>⚙</i> Paramètres du compte
+                  </button>
+                )}
                 <button
                   type="button"
                   role="menuitem"
@@ -520,10 +541,10 @@ export default function Home() {
               CHANTIERS / {projectIdentity?.code ?? "…"}
             </span>
             <h1>
-              {view === "dashboard"
+              {activeView === "dashboard"
                 ? "Bonjour,"
                 : ([...personnelNav, ...magasinNav, ...nav].find(
-                    (n) => n[0] === view,
+                    (n) => n[0] === activeView,
                   )?.[2] ?? "Paramètres")}
             </h1>
           </div>
@@ -549,23 +570,25 @@ export default function Home() {
             <button className="bell">
               ♢<span />
             </button>
-            <button className="primary" onClick={() => setView("pointage")}>
-              ＋ Saisir la journée
-            </button>
+            {canSee("pointage") && (
+              <button className="primary" onClick={() => openView("pointage")}>
+                ＋ Saisir la journée
+              </button>
+            )}
           </div>
         </header>
 
-        {view === "dashboard" && (
-          <Dashboard setView={setView} toast={toast} workDate={workDate} />
+        {activeView === "dashboard" && (
+          <Dashboard setView={openView} toast={toast} workDate={workDate} />
         )}
-        {view === "presence" && (
+        {activeView === "presence" && (
           <MorningPresence
             workDate={workDate}
             dateLabel={dateLabel}
             toast={toast}
           />
         )}
-        {view === "pointage" && (
+        {activeView === "pointage" && (
           <Pointage
             accessToken={accessToken}
             workDate={workDate}
@@ -573,10 +596,10 @@ export default function Home() {
             toast={toast}
           />
         )}
-        {view === "equipes" && (
+        {activeView === "equipes" && (
           <Teams accessToken={accessToken} toast={toast} />
         )}
-        {view === "interim" && (
+        {activeView === "interim" && (
           <Interim
             accessToken={accessToken}
             workDate={workDate}
@@ -584,37 +607,41 @@ export default function Home() {
             toast={toast}
           />
         )}
-        {view === "taches" && <Tasks accessToken={accessToken} toast={toast} />}
-        {view === "zones" && <Zones accessToken={accessToken} toast={toast} />}
-        {view === "stock" && (
+        {activeView === "taches" && (
+          <Tasks accessToken={accessToken} toast={toast} />
+        )}
+        {activeView === "zones" && (
+          <Zones accessToken={accessToken} toast={toast} />
+        )}
+        {activeView === "stock" && (
           <StockManager toast={toast} accessToken={accessToken} />
         )}
-        {view === "engins" && (
+        {activeView === "engins" && (
           <MagasinManager
             section="engin"
             toast={toast}
             accessToken={accessToken}
           />
         )}
-        {view === "outillage" && (
+        {activeView === "outillage" && (
           <MagasinManager
             section="outillage"
             toast={toast}
             accessToken={accessToken}
           />
         )}
-        {view === "acces" && (
+        {activeView === "acces" && (
           <MagasinManager
             section="acces"
             toast={toast}
             accessToken={accessToken}
           />
         )}
-        {view === "travaux-supplementaires" && (
+        {activeView === "travaux-supplementaires" && (
           <ExtraWorksManager toast={toast} accessToken={accessToken} />
         )}
-        {view === "cables" && <Cables toast={toast} />}
-        {view === "settings" && (
+        {activeView === "cables" && <Cables toast={toast} />}
+        {activeView === "settings" && (
           <Settings
             accessToken={accessToken}
             currentProfile={currentProfile}

@@ -67,3 +67,61 @@ export function roleLabel(role?: string | null) {
     accessLevels.find(([value]) => value === role)?.[1] ?? "Profil utilisateur"
   );
 }
+
+// Accounts created without a real mailbox (like "admin") live under this
+// domain, so users can sign in with the short identifier.
+const INTERNAL_LOGIN_DOMAIN = "pilotis.internal";
+
+export function loginEmail(identifier: string) {
+  const value = identifier.trim().toLowerCase();
+  return value.includes("@") ? value : `${value}@${INTERNAL_LOGIN_DOMAIN}`;
+}
+
+export function loginLabel(email: string) {
+  return email.endsWith(`@${INTERNAL_LOGIN_DOMAIN}`)
+    ? email.slice(0, -INTERNAL_LOGIN_DOMAIN.length - 1)
+    : email;
+}
+
+const allViews: View[] = [
+  "dashboard",
+  "presence",
+  "pointage",
+  "equipes",
+  "interim",
+  "taches",
+  "zones",
+  "stock",
+  "engins",
+  "outillage",
+  "acces",
+  "cables",
+  "travaux-supplementaires",
+  "settings",
+];
+
+const magasinViews: View[] = ["stock", "engins", "outillage", "acces"];
+
+// Screens each role can open. The API and Supabase policies still enforce
+// write access; this only keeps people away from screens they cannot use.
+const roleViews: Record<string, View[]> = {
+  administrateur: allViews,
+  bureau: allViews,
+  conducteur: allViews,
+  chef_chantier: allViews.filter(
+    (view) => view !== "interim" && view !== "settings",
+  ),
+  magasinier: ["dashboard", ...magasinViews],
+  consultation: [
+    "dashboard",
+    "taches",
+    "zones",
+    "cables",
+    "travaux-supplementaires",
+    ...magasinViews,
+  ],
+};
+
+export function canAccessView(role: string | null | undefined, view: View) {
+  return (roleViews[role ?? ""] ?? ["dashboard"]).includes(view);
+}
