@@ -22,29 +22,49 @@ import { StockManager } from "@/app/views/stock";
 import { Tasks } from "@/app/views/tasks";
 import { Teams } from "@/app/views/teams";
 import { Zones } from "@/app/views/zones";
+import { Icon, type IconName } from "@/app/ui/icons";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
-const personnelNav = [
-  ["presence", "✓", "Présence du matin"],
-  ["pointage", "◷", "Affectation journalière"],
-  ["equipes", "♙", "Équipes"],
-  ["interim", "▣", "Intérim & feuilles"],
-] as [View, string, string][];
+type NavItem = [View, IconName, string];
 
-const magasinNav = [
-  ["stock", "▦", "Suivi de stock"],
-  ["engins", "♜", "Engins"],
-  ["outillage", "⌘", "Électroportatif / Outillage"],
-  ["acces", "⌑", "Moyens d’accès"],
-] as [View, string, string][];
-
-const nav = [
-  ["dashboard", "⌂", "Vue d’ensemble"],
-  ["taches", "▤", "Tâches & budgets"],
-  ["zones", "⌖", "Zones de travail"],
-  ["cables", "⌁", "Carnet de câbles"],
-  ["travaux-supplementaires", "＋", "Travaux supplémentaires"],
-] as [View, string, string][];
+// Grouped by when people use them: the day's entries, the job's follow-up,
+// then the teams and the store.
+const navGroups: { title: string | null; items: NavItem[] }[] = [
+  { title: null, items: [["dashboard", "home", "Vue d’ensemble"]] },
+  {
+    title: "Journée",
+    items: [
+      ["presence", "check", "Présence du matin"],
+      ["pointage", "clock", "Affectation des heures"],
+    ],
+  },
+  {
+    title: "Affaire",
+    items: [
+      ["taches", "list", "Tâches et budgets"],
+      ["zones", "pin", "Zones et avancement"],
+      ["travaux-supplementaires", "plus", "Travaux supplémentaires"],
+      ["cables", "cable", "Carnet de câbles"],
+    ],
+  },
+  {
+    title: "Équipes et magasin",
+    items: [
+      ["equipes", "users", "Équipes"],
+      ["interim", "file", "Intérim et feuilles"],
+      ["stock", "box", "Stock"],
+      ["engins", "truck", "Engins"],
+      ["outillage", "wrench", "Électroportatif et outillage"],
+      ["acces", "ladder", "Moyens d’accès"],
+    ],
+  },
+];
+const viewTitles = new Map<View, string>([
+  ...navGroups.flatMap((group) =>
+    group.items.map(([id, , label]) => [id, label] as [View, string]),
+  ),
+  ["settings", "Paramètres"],
+]);
 
 export default function Home() {
   const [accessToken, setAccessToken] = useState("");
@@ -58,11 +78,8 @@ export default function Home() {
   const [accountSaving, setAccountSaving] = useState(false);
   const [view, setView] = useState<View>("dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [openNavSections, setOpenNavSections] = useState({
-    personnel: false,
-    magasin: false,
-    chantier: false,
-  });
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+  const [projects, setProjects] = useState<ProjectIdentity[]>([]);
   const [notice, setNotice] = useState("");
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(
@@ -97,15 +114,16 @@ export default function Home() {
             .eq("id", user.id)
             .maybeSingle()
         : Promise.resolve({ data: null }),
-      db
-        .from("projects")
-        .select("id,code,name,location")
-        .eq("code", "24-018")
-        .single(),
+      // Row Level Security returns only the projects this account belongs to.
+      db.from("projects").select("id,code,name,location").order("code"),
     ]);
+    const memberProjects = (projectResult.data ?? []) as ProjectIdentity[];
     setUserEmail(user?.email ?? "");
     setCurrentProfile(profileResult.data as CurrentProfile | null);
-    setProjectIdentity(projectResult.data as ProjectIdentity | null);
+    setProjects(memberProjects);
+    setProjectIdentity(
+      memberProjects.find((project) => project.code === "24-018") ?? null,
+    );
   }
 
   useEffect(() => {
@@ -137,6 +155,24 @@ export default function Home() {
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [accountMenuOpen]);
+
+  useEffect(() => {
+    if (!projectMenuOpen) return;
+    const closeMenu = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && !target.closest("[data-project-menu]"))
+        setProjectMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setProjectMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", closeMenu);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeMenu);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [projectMenuOpen]);
 
   useEffect(() => {
     if (!mobileMenuOpen) return;
@@ -299,9 +335,12 @@ export default function Home() {
   const role = currentProfile?.role;
   const canSee = (target: View) => canAccessView(role, target);
   const activeView = canSee(view) ? view : "dashboard";
-  const visiblePersonnelNav = personnelNav.filter(([id]) => canSee(id));
-  const visibleMagasinNav = magasinNav.filter(([id]) => canSee(id));
-  const visibleChantierNav = nav.slice(1).filter(([id]) => canSee(id));
+  const visibleGroups = navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter(([id]) => canSee(id)),
+    }))
+    .filter((group) => group.items.length > 0);
   function openView(target: View) {
     if (canSee(target)) setView(target);
   }
@@ -318,145 +357,101 @@ export default function Home() {
       ) : null}
       <aside className={`sidebar${mobileMenuOpen ? " mobile-open" : ""}`}>
         <div className="brand">
-          <span className="brandmark">P</span>
-          <div>
-            <b>PILOTIS</b>
-            <small>CHANTIER ÉLECTRIQUE</small>
-          </div>
+          <span className="brandmark" aria-hidden="true">
+            P
+          </span>
+          <b>Pilotis</b>
           <button
             type="button"
             className="sidebar-mobile-close"
             aria-label="Fermer le menu"
             onClick={() => setMobileMenuOpen(false)}
           >
-            ×
+            <Icon name="close" />
           </button>
         </div>
-        <div className="project-switch">
-          <span>CHANTIER ACTIF</span>
-          <b>{projectIdentity?.name ?? "Chargement du chantier…"}</b>
-          <small>
-            {[projectIdentity?.location, projectIdentity?.code]
-              .filter(Boolean)
-              .join(" · ") || "—"}{" "}
-            ↕
-          </small>
+        <div className="project-picker" data-project-menu>
+          <button
+            type="button"
+            className="project-switch"
+            aria-haspopup="listbox"
+            aria-expanded={projectMenuOpen}
+            onClick={() => setProjectMenuOpen((open) => !open)}
+          >
+            <span>Affaire</span>
+            <b>
+              {projectIdentity
+                ? `${projectIdentity.code} · ${projectIdentity.name}`
+                : "Chargement de l’affaire…"}
+            </b>
+            <small>
+              {projectIdentity?.location ?? "—"}
+              <Icon name="chevronDown" size={16} />
+            </small>
+          </button>
+          {projectMenuOpen && (
+            <div className="project-menu">
+              <ul role="listbox" aria-label="Affaires">
+                {projects.map((project) => (
+                  <li
+                    role="option"
+                    aria-selected={project.id === projectIdentity?.id}
+                    key={project.id}
+                  >
+                    <b>
+                      {project.code} · {project.name}
+                    </b>
+                    <small>{project.location ?? "—"}</small>
+                    {project.id === projectIdentity?.id && (
+                      <Icon name="check" size={16} />
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <p>
+                {projects.length > 1
+                  ? "Le changement d’affaire arrive avec le suivi multi-affaires."
+                  : "Vous êtes rattaché à une seule affaire."}
+              </p>
+            </div>
+          )}
         </div>
-        <nav>
-          {nav.slice(0, 1).map(([id, icon, label]) => (
-            <button
-              key={id}
-              onClick={() => {
-                openView(id);
-                setMobileMenuOpen(false);
-              }}
-              className={activeView === id ? "active" : ""}
-            >
-              <i>{icon}</i>
-              {label}
-            </button>
+        <nav aria-label="Navigation principale">
+          {visibleGroups.map((group) => (
+            <div className="nav-group" key={group.title ?? "accueil"}>
+              {group.title && (
+                <span className="nav-section-label">{group.title}</span>
+              )}
+              {group.items.map(([id, icon, label]) => (
+                <button
+                  type="button"
+                  key={id}
+                  aria-current={activeView === id ? "page" : undefined}
+                  className={activeView === id ? "active" : ""}
+                  onClick={() => {
+                    openView(id);
+                    setMobileMenuOpen(false);
+                  }}
+                >
+                  <Icon name={icon} />
+                  {label}
+                </button>
+              ))}
+            </div>
           ))}
-          {visiblePersonnelNav.length > 0 && (
-            <button
-              type="button"
-              className="nav-section-toggle"
-              aria-expanded={openNavSections.personnel}
-              onClick={() =>
-                setOpenNavSections((current) => ({
-                  ...current,
-                  personnel: !current.personnel,
-                }))
-              }
-            >
-              <span>PERSONNEL</span>
-              <i>{openNavSections.personnel ? "⌃" : "⌄"}</i>
-            </button>
-          )}
-          {openNavSections.personnel &&
-            visiblePersonnelNav.map(([id, icon, label]) => (
-              <button
-                key={id}
-                onClick={() => {
-                  openView(id);
-                  setMobileMenuOpen(false);
-                }}
-                className={activeView === id ? "active" : ""}
-              >
-                <i>{icon}</i>
-                {label}
-              </button>
-            ))}
-          {visibleMagasinNav.length > 0 && (
-            <button
-              type="button"
-              className="nav-section-toggle"
-              aria-expanded={openNavSections.magasin}
-              onClick={() =>
-                setOpenNavSections((current) => ({
-                  ...current,
-                  magasin: !current.magasin,
-                }))
-              }
-            >
-              <span>MAGASIN</span>
-              <i>{openNavSections.magasin ? "⌃" : "⌄"}</i>
-            </button>
-          )}
-          {openNavSections.magasin &&
-            visibleMagasinNav.map(([id, icon, label]) => (
-              <button
-                key={id}
-                onClick={() => {
-                  openView(id);
-                  setMobileMenuOpen(false);
-                }}
-                className={activeView === id ? "active" : ""}
-              >
-                <i>{icon}</i>
-                {label}
-              </button>
-            ))}
-          {visibleChantierNav.length > 0 && (
-            <button
-              type="button"
-              className="nav-section-toggle"
-              aria-expanded={openNavSections.chantier}
-              onClick={() =>
-                setOpenNavSections((current) => ({
-                  ...current,
-                  chantier: !current.chantier,
-                }))
-              }
-            >
-              <span>CHANTIER</span>
-              <i>{openNavSections.chantier ? "⌃" : "⌄"}</i>
-            </button>
-          )}
-          {openNavSections.chantier &&
-            visibleChantierNav.map(([id, icon, label]) => (
-              <button
-                key={id}
-                onClick={() => {
-                  openView(id);
-                  setMobileMenuOpen(false);
-                }}
-                className={activeView === id ? "active" : ""}
-              >
-                <i>{icon}</i>
-                {label}
-              </button>
-            ))}
         </nav>
         <div className="sidebar-bottom">
           {canSee("settings") && (
             <button
+              type="button"
               onClick={() => {
                 openView("settings");
                 setMobileMenuOpen(false);
               }}
+              aria-current={activeView === "settings" ? "page" : undefined}
               className={activeView === "settings" ? "active" : ""}
             >
-              <i>⚙</i> Paramètres
+              <Icon name="settings" /> Paramètres
             </button>
           )}
           <div className="user" data-account-menu>
@@ -479,7 +474,7 @@ export default function Home() {
               aria-expanded={accountMenuOpen}
               onClick={() => setAccountMenuOpen((open) => !open)}
             >
-              ⋮
+              <Icon name="more" />
             </button>
             {accountMenuOpen && (
               <div className="account-menu" role="menu">
@@ -497,7 +492,7 @@ export default function Home() {
                       openView("settings");
                     }}
                   >
-                    <i>⚙</i> Paramètres du compte
+                    Paramètres du compte
                   </button>
                 )}
                 <button
@@ -509,7 +504,7 @@ export default function Home() {
                     setPasswordDialogOpen(true);
                   }}
                 >
-                  <i>⌘</i> Changer le mot de passe
+                  Changer le mot de passe
                 </button>
                 <button
                   className="account-signout"
@@ -517,7 +512,7 @@ export default function Home() {
                   role="menuitem"
                   onClick={signOut}
                 >
-                  <i>↪</i> Se déconnecter
+                  Se déconnecter
                 </button>
               </div>
             )}
@@ -534,45 +529,49 @@ export default function Home() {
             aria-expanded={mobileMenuOpen}
             onClick={() => setMobileMenuOpen(true)}
           >
-            ☰
+            <Icon name="menu" size={22} />
           </button>
-          <div>
-            <span className="crumb">
-              CHANTIERS / {projectIdentity?.code ?? "…"}
-            </span>
-            <h1>
-              {activeView === "dashboard"
-                ? `Bonjour${currentProfile?.full_name ? ` ${currentProfile.full_name.split(/\s+/)[0]}` : ""}`
-                : ([...personnelNav, ...magasinNav, ...nav].find(
-                    (n) => n[0] === activeView,
-                  )?.[2] ?? "Paramètres")}
-            </h1>
-          </div>
+          <h1>
+            {activeView === "dashboard"
+              ? `Bonjour${currentProfile?.full_name ? ` ${currentProfile.full_name.split(/\s+/)[0]}` : ""}`
+              : viewTitles.get(activeView)}
+          </h1>
           <div className="header-actions">
             <div className="date-nav">
-              <button aria-label="Jour précédent" onClick={() => moveDate(-1)}>
-                ‹
+              <button
+                type="button"
+                aria-label="Jour précédent"
+                onClick={() => moveDate(-1)}
+              >
+                <Icon name="chevronLeft" />
               </button>
               <input
                 className="date-picker"
                 type="date"
-                aria-label="Sélectionner la date de travail"
+                aria-label="Date de travail"
                 value={workDate}
                 onChange={(event) => {
                   if (event.target.value)
                     setSelectedDate(new Date(`${event.target.value}T12:00:00`));
                 }}
               />
-              <button aria-label="Jour suivant" onClick={() => moveDate(1)}>
-                ›
+              <button
+                type="button"
+                aria-label="Jour suivant"
+                onClick={() => moveDate(1)}
+              >
+                <Icon name="chevronRight" />
               </button>
             </div>
-            <button className="bell">
-              ♢<span />
-            </button>
             {canSee("pointage") && (
-              <button className="primary" onClick={() => openView("pointage")}>
-                ＋ Saisir la journée
+              <button
+                type="button"
+                className="btn btn-primary header-entry"
+                aria-label="Saisir la journée"
+                onClick={() => openView("pointage")}
+              >
+                <Icon name="plus" />
+                <span>Saisir la journée</span>
               </button>
             )}
           </div>
