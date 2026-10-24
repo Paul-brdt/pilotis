@@ -99,6 +99,8 @@ export function Dashboard({
     [],
   );
   const [vicWarningDays, setVicWarningDays] = useState(30);
+  // Deadlines (VIC, rentals) count from the real today, read once.
+  const [now] = useState(() => Date.now());
 
   const dateRange = useMemo(() => {
     const anchor = new Date(`${workDate}T12:00:00`);
@@ -425,9 +427,7 @@ export function Dashboard({
   const remainingDays = (date: string | null) =>
     date === null
       ? null
-      : Math.ceil(
-          (new Date(`${date}T12:00:00`).getTime() - Date.now()) / 86400000,
-        );
+      : Math.ceil((new Date(`${date}T12:00:00`).getTime() - now) / 86400000);
   const alerts: Alert[] = [
     ...taskStats
       .filter((task) => task.percent > 100)
