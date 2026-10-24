@@ -1027,55 +1027,51 @@ body {
   position: fixed;
   inset: 0 auto 0 0;
   width: 252px;
-  background: var(--color-night-raised);
-  color: white;
-  padding: 27px 18px 20px;
+  background: var(--color-night);
+  color: #e8efec;
+  padding: 20px 14px 16px;
   display: flex;
   flex-direction: column;
+  gap: 18px;
   z-index: 5;
 }
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 8px 27px;
+  gap: 10px;
+  padding: 0 6px;
 }
 .brandmark {
-  width: 37px;
-  height: 37px;
-  border: 1px solid var(--color-amber);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
-  font: 700 22px var(--font-sans);
-  color: var(--color-amber-soft);
-  transform: rotate(45deg);
-}
-.brandmark::first-letter {
-  transform: rotate(-45deg);
-}
-.brand div {
-  display: flex;
-  flex-direction: column;
+  background: var(--color-brand);
+  font: 700 16px var(--font-sans);
+  color: var(--color-surface);
 }
 .brand b {
-  font: 700 18px var(--font-sans);
-  letter-spacing: 2px;
-  color: var(--color-amber-soft);
+  font: 700 17px var(--font-sans);
+  letter-spacing: 0.02em;
+  color: var(--color-surface);
 }
-.brand small {
-  font-size: 13px;
-  letter-spacing: 1.45px;
-  color: var(--color-night-muted);
-  margin-top: 3px;
+.project-picker {
+  position: relative;
 }
-.project-switch {
-  background: var(--color-night-line);
-  border: 1px solid var(--color-night-line);
-  border-radius: 5px;
-  padding: 13px 14px;
-  margin-bottom: 24px;
+.sidebar .project-switch {
+  width: 100%;
   display: flex;
   flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  border: 1px solid var(--color-night-line);
+  border-radius: 10px;
+  background: var(--color-night-raised);
+  text-align: left;
+}
+.sidebar .project-switch:hover {
+  border-color: var(--color-night-muted);
 }
 .project-switch span,
 .panel-title span,
@@ -1088,17 +1084,67 @@ body {
 }
 .project-switch b {
   font-size: 15px;
-  margin: 7px 0;
+  font-weight: 600;
   color: var(--color-surface);
 }
 .project-switch small {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 13px;
+  color: #b9cbc4;
+}
+.project-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  box-shadow: 0 12px 32px rgb(7 28 23 / 30%);
+}
+.project-menu ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.project-menu li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: 8px;
+  padding: 10px;
+  border-radius: 8px;
+}
+.project-menu li[aria-selected="true"] {
+  background: var(--color-brand-soft);
+  color: var(--color-brand-strong);
+}
+.project-menu li b {
   font-size: 14px;
-  color: var(--color-night-muted);
+}
+.project-menu li small {
+  grid-column: 1;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+.project-menu li svg {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+}
+.project-menu p {
+  margin: 4px 10px 6px;
+  font-size: 13px;
+  color: var(--color-muted);
 }
 .sidebar nav {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 16px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -1121,27 +1167,33 @@ body {
 .sidebar button {
   border: 0;
   background: none;
-  color: var(--color-night-muted);
+  color: #e8efec;
   text-align: left;
-  border-radius: 5px;
-  padding: 11px 12px;
-  font-size: 15px;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font: 400 15px var(--font-sans);
   cursor: pointer;
 }
-.sidebar button i {
-  font-style: normal;
-  display: inline-grid;
-  place-items: center;
-  width: 24px;
-  font-size: 16px;
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sidebar nav button,
+.sidebar-bottom > button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sidebar nav button:hover,
+.sidebar-bottom > button:hover {
+  background: var(--color-night-raised);
 }
 .sidebar nav button.active,
-.sidebar nav button:hover {
-  background: var(--color-night-line);
+.sidebar-bottom > button.active {
+  background: var(--color-brand);
   color: var(--color-surface);
-}
-.sidebar nav button.active {
-  border-left: 3px solid var(--color-amber);
+  font-weight: 600;
 }
 .sidebar-bottom {
   margin-top: auto;
@@ -1341,27 +1393,26 @@ body {
   width: calc(100% - 252px);
 }
 header {
-  height: 88px;
+  height: 72px;
   background: var(--color-surface);
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 34px;
+  gap: 16px;
+  padding: 0 32px;
   position: sticky;
   top: 0;
   z-index: 4;
 }
 header h1 {
-  font: 600 25px var(--font-sans);
-  margin: 4px 0 0;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font: 600 22px var(--font-sans);
   color: var(--ink);
-}
-.crumb {
-  font-size: 13px;
-  letter-spacing: 1.3px;
-  color: var(--color-muted);
-  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .header-actions {
   display: flex;
@@ -1391,21 +1442,20 @@ header h1 {
   font-size: 14px;
   cursor: pointer;
 }
-.bell {
-  position: relative;
-  font-size: 17px !important;
-}
-.bell span {
-  position: absolute;
-  width: 6px;
-  height: 6px;
-  background: var(--color-amber);
-  border-radius: 50%;
-  right: 7px;
-  top: 6px;
-}
 .mobile-menu {
   display: none;
+}
+.header-actions .header-entry {
+  height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--color-brand);
+  color: var(--color-surface);
+  font: 600 15px var(--font-sans);
+}
+.header-actions .header-entry:hover {
+  background: var(--color-brand-strong);
 }
 .sidebar-mobile-close,
 .mobile-menu-backdrop {
@@ -1442,15 +1492,13 @@ header h1 {
   color: var(--muted);
 }
 .date-picker {
-  border: 1px solid var(--color-line-strong);
-  border-radius: 4px;
+  width: 150px;
+  height: 42px;
+  padding: 0 8px;
+  border: 0;
   background: var(--color-surface);
-  color: var(--color-muted);
-  font: 600 9px Arial;
-}
-.date-picker {
-  width: 138px;
-  padding: 8px 9px;
+  color: var(--color-ink);
+  font: 500 15px var(--font-sans);
   text-align: center;
 }
 @media (max-width: 900px) {
@@ -2011,15 +2059,14 @@ td .avatar {
     box-shadow: 18px 0 45px #071c1766;
     animation: mobile-sidebar-in 0.2s ease-out;
   }
-  .sidebar-mobile-close {
+  .sidebar .sidebar-mobile-close {
     display: grid;
-    width: 34px;
-    height: 34px;
+    width: 44px;
+    height: 44px;
     margin-left: auto;
+    padding: 0;
     place-items: center;
     color: var(--color-surface);
-    font-size: 25px;
-    line-height: 1;
   }
   .mobile-menu-backdrop {
     position: fixed;
@@ -2034,35 +2081,48 @@ td .avatar {
     width: 100%;
   }
   header {
-    height: 72px;
-    padding: 0 16px;
+    height: 64px;
+    gap: 8px;
+    padding: 0 10px;
   }
   .mobile-menu {
-    display: block;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
     border: 0;
+    border-radius: 10px;
     background: none;
-    font-size: 20px;
-    margin-right: 10px;
+    color: var(--color-ink);
   }
-  header > div:first-of-type {
-    flex: 1;
-  }
+  /* Each screen repeats its title just below; keep it for screen readers. */
   header h1 {
-    font-size: 19px;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
   }
-  .crumb {
+  header .header-actions {
+    margin-left: auto;
+  }
+  .header-actions {
+    gap: 6px;
+  }
+  .date-nav button {
+    width: 32px;
+  }
+  .date-picker {
+    width: 118px;
+    padding: 0 2px;
+    font-size: 14px;
+  }
+  .header-actions .header-entry {
+    width: 44px;
+    padding: 0;
+  }
+  .header-actions .header-entry span {
     display: none;
-  }
-  .header-actions .bell {
-    display: none;
-  }
-  .header-actions .primary {
-    padding: 10px;
-    font-size: 0;
-  }
-  .header-actions .primary::after {
-    content: "＋";
-    font-size: 18px;
   }
   .content {
     padding: 20px 14px;
@@ -2443,14 +2503,20 @@ td .avatar {
 .date-nav {
   display: flex;
   align-items: center;
-  border: 1px solid var(--line);
-  border-radius: 4px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: 10px;
   overflow: hidden;
 }
 .date-nav button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 42px !important;
+  padding: 0 !important;
   border: 0 !important;
   border-radius: 0 !important;
   background: var(--color-surface);
+  color: var(--color-ink) !important;
 }
 .date-nav .date {
   border-left: 1px solid var(--line) !important;
@@ -2479,31 +2545,12 @@ td .avatar {
 /* Personnel, présence et horaires */
 .nav-section-label {
   display: block;
-  padding: 16px 12px 5px;
+  padding: 0 12px 6px;
   color: var(--color-night-muted);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 1.2px;
-}
-.sidebar nav .nav-section-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 8px;
-  padding: 8px 12px 4px;
-  border-radius: 4px;
-  color: var(--color-night-muted);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 1.2px;
-}
-.sidebar nav .nav-section-toggle i {
-  width: auto;
-  font-size: 15px;
-}
-.sidebar nav .nav-section-toggle:hover {
-  background: var(--color-night-line);
-  color: var(--color-line);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 .functional-stock-kpis {
   grid-template-columns: repeat(3, 1fr);
