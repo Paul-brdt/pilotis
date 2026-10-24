@@ -1,3 +1,5 @@
+-- Note : l’index stock_locations_created_by_idx a été créé en base
+-- séparément ; il ne figure pas dans la version enregistrée de cette migration.
 alter table public.stock_items add column if not exists active boolean not null default true;
 
 create table if not exists public.stock_locations (

@@ -1,3 +1,5 @@
+-- Note : appliquée directement en base, hors historique des migrations
+-- Supabase (absente de supabase_migrations.schema_migrations).
 create table if not exists public.stock_families (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references public.projects(id) on delete cascade,

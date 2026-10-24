@@ -165,22 +165,19 @@ L’application est accessible par défaut sur [http://localhost:3000](http://lo
 
 ## Configuration Supabase
 
-Les fichiers du dossier `supabase/migrations` ajoutent notamment :
+Le dossier `supabase/` contient tout ce qu’il faut pour reconstruire la base :
 
-- la présence journalière et les horaires paramétrables ;
-- les permissions du catalogue de stock ;
-- les emplacements, transferts et inventaires ;
-- les engins, l’outillage et les moyens d’accès ;
-- les travaux supplémentaires ;
-- les familles de stock configurables.
+- `migrations/` : l’historique complet du schéma, du schéma initial aux règles d’accès par chantier, avec les numéros de version enregistrés dans la base de production ;
+- `functions/admin-users/` : la fonction de création et de gestion des comptes utilisateurs, réservée à l’administrateur.
 
-### Important
+Pour une nouvelle base, appliquer les migrations dans l’ordre chronologique, puis déployer la fonction `admin-users`.
 
-Les migrations actuellement présentes sont des **migrations complémentaires**. Elles supposent que le schéma métier initial existe déjà, notamment les tables `projects`, `project_memberships`, `profiles`, `people`, `tasks`, `zones`, `stock_items` et `stock_movements`.
+### À savoir
 
-Avant d’utiliser une nouvelle base Supabase, il faut donc restaurer le schéma initial du projet puis appliquer les migrations dans leur ordre chronologique.
+- Les données de départ (`seed_reference_data`) sont des données de démonstration ; les noms des personnes y sont anonymisés dans la version publique.
+- `stock_families_management` et un index de `stock_locations_inventory` ont été appliqués directement en base, hors historique des migrations ; chaque fichier le signale en tête.
 
-Toutes les tables exposées doivent conserver la Row Level Security activée. N’utilisez jamais une clé `service_role` dans une variable `NEXT_PUBLIC_*` ou dans du code exécuté par le navigateur.
+Toutes les tables exposées doivent conserver la Row Level Security activée : la lecture est réservée aux membres du chantier et l’écriture aux rôles concernés. N’utilisez jamais une clé `service_role` dans une variable `NEXT_PUBLIC_*` ou dans du code exécuté par le navigateur.
 
 ## Scripts disponibles
 
