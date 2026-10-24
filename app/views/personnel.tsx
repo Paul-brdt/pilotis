@@ -37,7 +37,7 @@ type Attendance = {
 
 const absenceReasons: Array<[AttendanceStatus, string]> = [
   ["non_renseigne", "Choisir un motif…"],
-  ["absent", "Absent"],
+  ["absent", "Autre motif"],
   ["conge", "Congé"],
   ["formation", "Formation"],
   ["maladie", "Maladie"],
@@ -105,6 +105,7 @@ export function MorningPresence({
   const [userId, setUserId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [openHours, setOpenHours] = useState<Record<string, boolean>>({});
 
   async function load() {
     setLoading(true);
@@ -219,6 +220,17 @@ export function MorningPresence({
       status: current.status === "present" ? "non_renseigne" : "present",
     });
   }
+  function markAbsent(personId: string) {
+    const current = rowFor(personId);
+    const isAbsent =
+      current.status !== "present" && current.status !== "non_renseigne";
+    change(personId, { status: isAbsent ? "non_renseigne" : "absent" });
+  }
+  function markAllPresent() {
+    for (const person of people)
+      if (rowFor(person.id).status === "non_renseigne")
+        change(person.id, { status: "present" });
+  }
   async function saveAll() {
     const missing = people.filter(
       (person) => rowFor(person.id).status === "non_renseigne",
@@ -267,6 +279,11 @@ export function MorningPresence({
     },
     {} as Record<string, number>,
   );
+  const presentCount = summary.present || 0;
+  const missingCount = summary.non_renseigne || 0;
+  const absentCount = people.length - presentCount - missingCount;
+  const hoursLabel = (value: number) =>
+    `${value.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} h`;
   if (loading)
     return (
       <div className="content page-content">
@@ -274,153 +291,202 @@ export function MorningPresence({
       </div>
     );
   return (
-    <div className="content page-content presence-page">
-      <div className="page-head">
-        <div>
-          <h2>Présence du matin · {dateLabel}</h2>
-          <p>
-            Validez les présents d’un clic, puis choisissez uniquement le motif
-            des non-présents.
-          </p>
-        </div>
-        <div className="presence-actions">
-          <span className="status">
-            {schedule?.is_working_day
-              ? `${schedule.theoretical_hours} h théoriques · ${shortTime(schedule.start_time)}–${shortTime(schedule.end_time)}`
-              : "Journée non travaillée"}
-          </span>
-          <button
-            className="primary"
-            disabled={saving || !people.length}
-            onClick={() => void saveAll()}
-          >
-            {saving ? "Enregistrement…" : "Enregistrer toutes les présences"}
-          </button>
-        </div>
+    <div className="content page-content attendance">
+      <div className="attendance-head">
+        <h2>Présence du matin</h2>
+        <p>
+          {dateLabel} ·{" "}
+          {schedule?.is_working_day
+            ? `${hoursLabel(schedule.theoretical_hours)} prévues, ${shortTime(schedule.start_time)} – ${shortTime(schedule.end_time)}`
+            : "journée non travaillée"}
+        </p>
       </div>
-      <section className="presence-kpis">
-        <div>
-          <b>{summary.present || 0}</b>
-          <small>Présents</small>
-        </div>
-        <div>
-          <b>{summary.non_renseigne || 0}</b>
-          <small>Non renseignés</small>
-        </div>
-        <div>
-          <b>
-            {people.length -
-              (summary.present || 0) -
-              (summary.non_renseigne || 0)}
-          </b>
-          <small>Absences justifiées</small>
-        </div>
-      </section>
-      <div className="panel presence-table">
-        <div className="presence-head">
-          <span>COLLABORATEUR</span>
-          <span>PRÉSENT</span>
-          <span>MOTIF SI NON-PRÉSENT</span>
-          <span>ARRIVÉE</span>
-          <span>DÉPART</span>
-          <span>HEURES NORMALES</span>
-          <span>HEURES SUP.</span>
-        </div>
+      <div className="attendance-summary">
+        <span className="chip chip-ok">
+          {presentCount} présent{presentCount > 1 ? "s" : ""}
+        </span>
+        <span className="chip chip-warn">
+          {absentCount} absent{absentCount > 1 ? "s" : ""}
+        </span>
+        <span className="chip chip-neutral">{missingCount} à saisir</span>
+      </div>
+      {missingCount > 0 && (
+        <button
+          type="button"
+          className="btn btn-secondary attendance-all"
+          onClick={markAllPresent}
+        >
+          Marquer les {missingCount} restants présents
+        </button>
+      )}
+      <ul className="attendance-list">
         {people.map((person) => {
           const row = rowFor(person.id);
+          const present = row.status === "present";
+          const absent = !present && row.status !== "non_renseigne";
           const overtime =
             row.manual_overtime_hours ?? row.automatic_overtime_hours;
+          const showHours =
+            present &&
+            (openHours[person.id] ||
+              Boolean(row.arrival_time || row.departure_time) ||
+              row.manual_overtime_hours !== null);
+          const reason = absenceReasons.find(
+            ([value]) => value === row.status,
+          )?.[1];
           return (
-            <div
-              className={`presence-row ${row.status === "present" ? "is-present" : ""}`}
+            <li
+              className={`attendance-row${absent ? " is-absent" : ""}`}
               key={person.id}
             >
-              <div>
-                <b>{person.full_name}</b>
-                <small>{person.qualification || "Sans qualification"}</small>
-              </div>
-              <button
-                className={`present-toggle ${row.status === "present" ? "active" : ""}`}
-                aria-pressed={row.status === "present"}
-                onClick={() => markPresent(person.id)}
-              >
-                {row.status === "present" ? "✓ Présent" : "Valider"}
-              </button>
-              <select
-                disabled={row.status === "present"}
-                value={row.status === "present" ? "non_renseigne" : row.status}
-                onChange={(e) =>
-                  change(person.id, {
-                    status: e.target.value as AttendanceStatus,
-                  })
-                }
-              >
-                {absenceReasons.map(([value, label]) => (
-                  <option value={value} key={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="time"
-                disabled={row.status !== "present"}
-                value={shortTime(row.arrival_time)}
-                onChange={(e) =>
-                  change(person.id, { arrival_time: e.target.value })
-                }
-              />
-              <input
-                type="time"
-                disabled={row.status !== "present"}
-                value={shortTime(row.departure_time)}
-                onChange={(e) =>
-                  change(person.id, { departure_time: e.target.value })
-                }
-              />
-              <strong>
-                {row.regular_hours.toLocaleString("fr-FR", {
-                  maximumFractionDigits: 2,
-                })}{" "}
-                h
-              </strong>
-              <label className="overtime-field">
-                <input
-                  type="number"
-                  min="0"
-                  max="24"
-                  step="0.25"
-                  disabled={row.status !== "present"}
-                  value={overtime}
-                  onChange={(e) =>
-                    change(person.id, {
-                      manual_overtime_hours: Number(e.target.value),
-                    })
-                  }
-                />
-                {row.manual_overtime_hours !== null && (
+              <div className="attendance-person">
+                <span className="avatar-initials" aria-hidden="true">
+                  {person.full_name
+                    .split(/\s+/)
+                    .map((part) => part[0])
+                    .slice(0, 2)
+                    .join("")}
+                </span>
+                <span className="attendance-name">
+                  <b>{person.full_name}</b>
                   <small>
-                    corrigé · auto{" "}
-                    {row.automatic_overtime_hours.toLocaleString("fr-FR", {
-                      maximumFractionDigits: 2,
-                    })}{" "}
-                    h
+                    {person.qualification || "Sans qualification"}
+                    {person.contract_type === "interimaire" ? " · intérim" : ""}
+                    {present && row.regular_hours + overtime > 0
+                      ? ` · ${hoursLabel(row.regular_hours + overtime)}`
+                      : ""}
+                    {absent ? ` · ${reason}` : ""}
                   </small>
-                )}
-              </label>
-            </div>
+                </span>
+                <div
+                  className="attendance-toggle"
+                  role="group"
+                  aria-label={`Présence de ${person.full_name}`}
+                >
+                  <button
+                    type="button"
+                    className={`btn ${present ? "btn-primary" : "btn-secondary"}`}
+                    aria-pressed={present}
+                    onClick={() => markPresent(person.id)}
+                  >
+                    Présent
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn ${absent ? "btn-warn" : "btn-secondary"}`}
+                    aria-pressed={absent}
+                    onClick={() => markAbsent(person.id)}
+                  >
+                    Absent
+                  </button>
+                </div>
+              </div>
+              {absent && (
+                <div
+                  className="attendance-reasons"
+                  role="radiogroup"
+                  aria-label={`Motif d’absence de ${person.full_name}`}
+                >
+                  {absenceReasons
+                    .filter(([value]) => value !== "non_renseigne")
+                    .map(([value, label]) => (
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={row.status === value}
+                        className={`chip-button${row.status === value ? " is-selected" : ""}`}
+                        key={value}
+                        onClick={() => change(person.id, { status: value })}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                </div>
+              )}
+              {present && !showHours && schedule?.is_working_day && (
+                <button
+                  type="button"
+                  className="link-button attendance-hours-toggle"
+                  onClick={() =>
+                    setOpenHours((current) => ({
+                      ...current,
+                      [person.id]: true,
+                    }))
+                  }
+                >
+                  Horaires différents ?
+                </button>
+              )}
+              {showHours && (
+                <div className="attendance-hours">
+                  <label className="field">
+                    Arrivée
+                    <input
+                      type="time"
+                      value={shortTime(row.arrival_time)}
+                      placeholder={shortTime(schedule?.start_time)}
+                      onChange={(e) =>
+                        change(person.id, { arrival_time: e.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    Départ
+                    <input
+                      type="time"
+                      value={shortTime(row.departure_time)}
+                      placeholder={shortTime(schedule?.end_time)}
+                      onChange={(e) =>
+                        change(person.id, { departure_time: e.target.value })
+                      }
+                    />
+                  </label>
+                  <span className="field">
+                    Heures normales
+                    <strong>{hoursLabel(row.regular_hours)}</strong>
+                  </span>
+                  <label className="field">
+                    Heures sup.
+                    <input
+                      type="number"
+                      min="0"
+                      max="24"
+                      step="0.25"
+                      value={overtime}
+                      onChange={(e) =>
+                        change(person.id, {
+                          manual_overtime_hours: Number(e.target.value),
+                        })
+                      }
+                    />
+                    {row.manual_overtime_hours !== null && (
+                      <small>
+                        corrigé · calcul auto{" "}
+                        {hoursLabel(row.automatic_overtime_hours)}
+                      </small>
+                    )}
+                  </label>
+                </div>
+              )}
+            </li>
           );
         })}
-      </div>
-      <div className="presence-save-bar">
+      </ul>
+      <div className="attendance-save">
         <span>
-          {summary.non_renseigne || 0} personne(s) restent à renseigner
+          {missingCount
+            ? `${missingCount} personne${missingCount > 1 ? "s" : ""} à saisir`
+            : "Tout le monde est renseigné"}
         </span>
         <button
-          className="primary"
+          type="button"
+          className="btn btn-primary"
           disabled={saving || !people.length}
           onClick={() => void saveAll()}
         >
-          {saving ? "Enregistrement…" : "Enregistrer la feuille de présence"}
+          {saving
+            ? "Enregistrement…"
+            : `Enregistrer les ${people.length} présences`}
         </button>
       </div>
     </div>
