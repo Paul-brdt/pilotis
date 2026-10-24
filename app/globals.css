@@ -2158,10 +2158,6 @@ td .avatar {
     align-items: flex-start;
     gap: 10px;
   }
-  .page-head .primary {
-    font-size: 0;
-    padding: 10px;
-  }
   .page-head .primary::first-letter {
     font-size: 16px;
   }
@@ -4112,4 +4108,12 @@ td .avatar {
 }
 .task-modal {
   border-radius: 16px;
+}
+.timesheet-history-bar {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+.timesheet-history-bar > button {
+  min-height: 44px;
+  border-radius: 10px;
+  font-size: 15px;
 }

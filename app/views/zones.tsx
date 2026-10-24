@@ -436,13 +436,17 @@ export function Zones({
               </div>
               <div>
                 <small>CONSOMMATION</small>
-                <b>{consumption}%</b>
+                <b>{budget ? `${consumption} %` : "—"}</b>
                 <span>{hoursLabel(done)} réalisées</span>
               </div>
               <div>
                 <small>RESTANT</small>
-                <b>{hoursLabel(budget - done)}</b>
-                <span>budget disponible</span>
+                <b>{budget ? hoursLabel(budget - done) : "—"}</b>
+                <span>
+                  {budget
+                    ? "budget disponible"
+                    : "aucun budget réparti sur cette zone"}
+                </span>
               </div>
             </div>
             <div className="zone-task-title">
