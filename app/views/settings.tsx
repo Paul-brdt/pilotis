@@ -7,6 +7,7 @@ import {
   type QualificationRow,
 } from "@/app/shared";
 import { WorkScheduleSettings } from "@/app/views/personnel";
+import { Icon } from "@/app/ui/icons";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 type ProjectSettings = {
@@ -618,7 +619,7 @@ export function Settings({
               </small>
             </div>
             <button className="primary" onClick={() => setShowUser(true)}>
-              ＋ Nouvel utilisateur
+              <Icon name="plus" size={18} /> Nouvel utilisateur
             </button>
           </div>
           {error && <div className="settings-error">{error}</div>}
@@ -673,8 +674,12 @@ export function Settings({
                 <span>NOUVEL UTILISATEUR</span>
                 <h3>Créer un accès à PILOTIS</h3>
               </div>
-              <button type="button" onClick={() => setShowUser(false)}>
-                ×
+              <button
+                aria-label="Fermer"
+                type="button"
+                onClick={() => setShowUser(false)}
+              >
+                <Icon name="close" />
               </button>
             </div>
             <label>

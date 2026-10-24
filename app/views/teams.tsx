@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { PersonRow, AgencyRow, QualificationRow } from "@/app/shared";
+import { Icon } from "@/app/ui/icons";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 export function Teams({
@@ -133,7 +134,7 @@ export function Teams({
             setShowForm(true);
           }}
         >
-          ＋ Ajouter une personne
+          <Icon name="plus" size={18} /> Ajouter une personne
         </button>
       </div>
       <div className="panel data-panel">
@@ -221,13 +222,14 @@ export function Teams({
                 <h3>{editing?.full_name ?? "Ajouter une personne"}</h3>
               </div>
               <button
+                aria-label="Fermer"
                 type="button"
                 onClick={() => {
                   setShowForm(false);
                   setEditing(null);
                 }}
               >
-                ×
+                <Icon name="close" />
               </button>
             </div>
             <label>

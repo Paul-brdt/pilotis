@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchAllRows } from "@/lib/fetch-all";
+import { Icon } from "@/app/ui/icons";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 type TaskRow = {
@@ -141,7 +142,7 @@ export function Tasks({
           </p>
         </div>
         <button className="primary" onClick={() => setShowNew(true)}>
-          ＋ Nouvelle tâche
+          <Icon name="plus" size={18} /> Nouvelle tâche
         </button>
       </div>
       <div className="task-toolbar">
@@ -221,13 +222,14 @@ export function Tasks({
                 <h3>{editing ? editing.name : "Créer une tâche"}</h3>
               </div>
               <button
+                aria-label="Fermer"
                 type="button"
                 onClick={() => {
                   setEditing(null);
                   setShowNew(false);
                 }}
               >
-                ×
+                <Icon name="close" />
               </button>
             </div>
             <label>
@@ -299,7 +301,9 @@ export function Tasks({
                   {showHistory.code} · {showHistory.name}
                 </h3>
               </div>
-              <button onClick={() => setShowHistory(null)}>×</button>
+              <button onClick={() => setShowHistory(null)}>
+                <Icon name="close" />
+              </button>
             </div>
             {history.length ? (
               <div className="revision-list">

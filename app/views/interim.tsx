@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { ProjectIdentity, PersonRow, AgencyRow } from "@/app/shared";
 import { Kpi } from "@/app/ui/kpi";
+import { Icon } from "@/app/ui/icons";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { isoWeekNumber, type TimesheetSnapshot } from "@/lib/timesheet";
 
@@ -328,7 +329,7 @@ export function Interim({
           disabled={saving || !selectedAgencyId}
           onClick={() => void generate(selectedAgencyId)}
         >
-          ▤ Générer la feuille · S{weekNumber}
+          <Icon name="file" size={18} /> Générer la feuille · S{weekNumber}
         </button>
       </div>
       <div className="interim-tabs">
@@ -603,7 +604,7 @@ export function Interim({
                 setShowAgency(true);
               }}
             >
-              ＋ Créer une agence
+              <Icon name="plus" size={18} /> Créer une agence
             </button>
           </div>
           <div className="agency-cards">
@@ -619,10 +620,9 @@ export function Interim({
                       <small>{a.code}</small>
                       <h3>{a.name}</h3>
                     </div>
-                    <button>•••</button>
                   </div>
                   <div className="agency-address">
-                    <span>⌖</span>
+                    <Icon name="pin" size={18} />
                     <div>
                       {a.address}
                       <br />
@@ -674,8 +674,12 @@ export function Interim({
                 </span>
                 <h3>{editingAgency?.name ?? "Créer une agence"}</h3>
               </div>
-              <button type="button" onClick={() => setShowAgency(false)}>
-                ×
+              <button
+                aria-label="Fermer"
+                type="button"
+                onClick={() => setShowAgency(false)}
+              >
+                <Icon name="close" />
               </button>
             </div>
             <label>

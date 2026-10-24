@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Icon } from "@/app/ui/icons";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 type Tab = "overview" | "stock" | "engin" | "outillage" | "acces";
@@ -326,7 +327,7 @@ export function MagasinManager({
         <div className="stock-actions">
           {tab === "engin" ? (
             <button onClick={() => setShowAgency(true)}>
-              ＋ Agence de location
+              <Icon name="plus" size={18} /> Agence de location
             </button>
           ) : null}
           <button
@@ -336,7 +337,7 @@ export function MagasinManager({
               setShowAsset(true);
             }}
           >
-            ＋ Ajouter
+            <Icon name="plus" size={18} /> Ajouter
           </button>
         </div>
       </div>
@@ -464,13 +465,14 @@ export function MagasinManager({
                 </h3>
               </div>
               <button
+                aria-label="Fermer"
                 type="button"
                 onClick={() => {
                   setShowAsset(false);
                   setSelected(null);
                 }}
               >
-                ×
+                <Icon name="close" />
               </button>
             </div>
             <input type="hidden" name="category" value={tab} />
@@ -779,7 +781,8 @@ export function MagasinManager({
                         key={document.id}
                         onClick={() => void openDocument(document)}
                       >
-                        ▤ {documentLabels[document.document_type]} ·{" "}
+                        <Icon name="file" size={16} />{" "}
+                        {documentLabels[document.document_type]} ·{" "}
                         {document.file_name}
                       </button>
                     ))}
@@ -812,8 +815,12 @@ export function MagasinManager({
                 <span>LOUEURS</span>
                 <h3>Agences de location</h3>
               </div>
-              <button type="button" onClick={() => setShowAgency(false)}>
-                ×
+              <button
+                aria-label="Fermer"
+                type="button"
+                onClick={() => setShowAgency(false)}
+              >
+                <Icon name="close" />
               </button>
             </div>
             {agencies.length ? (
