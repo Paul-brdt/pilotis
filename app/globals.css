@@ -3688,10 +3688,34 @@ td .avatar {
 .time-entries td input {
   width: 100%;
   min-width: 90px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: white;
+  padding: 7px 8px;
+  font-size: 10px;
 }
 .time-entry-actions {
   white-space: nowrap;
   text-align: right;
+}
+.time-entry-actions button {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: white;
+  color: #34725f;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 7px 11px;
+  cursor: pointer;
+}
+.time-entry-actions button.primary {
+  background: #2e765f;
+  border-color: #2e765f;
+  color: white;
+}
+.time-entry-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 .time-entry-actions button + button {
   margin-left: 8px;
