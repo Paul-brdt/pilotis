@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Icon } from "@/app/ui/icons";
 import { Kpi } from "@/app/ui/kpi";
 import { fetchAllRows } from "@/lib/fetch-all";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
@@ -35,6 +36,7 @@ export function Zones({
   const [managedZones, setManagedZones] = useState<ManagedZone[]>([]);
   const [zoneTasks, setZoneTasks] = useState<ZoneTask[]>([]);
   const [allocations, setAllocations] = useState<ZoneAllocation[]>([]);
+  const [zoneHours, setZoneHours] = useState<Record<string, number>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingZone, setEditingZone] = useState<ManagedZone | null>(null);
   const [showZone, setShowZone] = useState(false);
@@ -79,7 +81,13 @@ export function Zones({
     }
     const loadedZones = (zoneData ?? []) as ManagedZone[];
     const doneByTaskAndZone = new Map<string, number>();
+    // Every hour booked on a zone counts, whether or not its task has a
+    // budget allocated to that zone.
+    const hoursByZone: Record<string, number> = {};
     for (const entry of entries ?? []) {
+      if (entry.zone_id)
+        hoursByZone[entry.zone_id] =
+          (hoursByZone[entry.zone_id] ?? 0) + Number(entry.hours);
       const key = `${entry.task_id}:${entry.zone_id}`;
       doneByTaskAndZone.set(
         key,
@@ -87,6 +95,7 @@ export function Zones({
       );
     }
     setManagedZones(loadedZones);
+    setZoneHours(hoursByZone);
     setZoneTasks(
       (taskData ?? []).map((task) => ({
         ...task,
@@ -240,24 +249,37 @@ export function Zones({
     (sum, task) => sum + task.allocated_hours,
     0,
   );
-  const done = tasksForZone.reduce((sum, task) => sum + task.done, 0);
+  const done = z ? (zoneHours[z.id] ?? 0) : 0;
   const consumption = budget ? Math.round((done / budget) * 100) : 0;
   const allBudget = allocations.reduce(
     (sum, allocation) => sum + allocation.allocated_hours,
     0,
   );
-  const allDone = allocations.reduce(
-    (sum, allocation) => sum + allocation.done,
+  const allDone = Object.values(zoneHours).reduce(
+    (sum, hours) => sum + hours,
     0,
   );
+  const zoneBudgetOf = (zoneId: string) =>
+    allocations
+      .filter((allocation) => allocation.zone_id === zoneId)
+      .reduce((sum, allocation) => sum + allocation.allocated_hours, 0);
+  // Same rule as the overview: weighted by each zone's allocated budget.
   const averageProgress = managedZones.length
     ? Math.round(
-        managedZones.reduce(
-          (sum, zone) => sum + Number(zone.physical_progress),
-          0,
-        ) / managedZones.length,
+        allBudget
+          ? managedZones.reduce(
+              (sum, zone) =>
+                sum + zoneBudgetOf(zone.id) * Number(zone.physical_progress),
+              0,
+            ) / allBudget
+          : managedZones.reduce(
+              (sum, zone) => sum + Number(zone.physical_progress),
+              0,
+            ) / managedZones.length,
       )
     : 0;
+  const hoursLabel = (value: number) =>
+    `${value.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} h`;
   const colors = ["#397f68", "#506fa7", "#936f25", "#795b9d", "#b15e43"];
   return (
     <div className="content page-content">
@@ -276,7 +298,7 @@ export function Zones({
             setShowZone(true);
           }}
         >
-          ＋ Nouvelle zone
+          <Icon name="plus" /> Nouvelle zone
         </button>
       </div>
       {error && <div className="settings-error">{error}</div>}
@@ -284,20 +306,24 @@ export function Zones({
         <Kpi
           label="ZONES ACTIVES"
           value={String(managedZones.length)}
-          detail={`${allocations.length} allocations budgétaires`}
+          detail={`${allocations.length} budget${allocations.length > 1 ? "s" : ""} réparti${allocations.length > 1 ? "s" : ""} par zone`}
           tone="green"
         />
         <Kpi
           label="AVANCEMENT MOYEN"
           value={`${averageProgress}%`}
-          detail="moyenne des zones configurées"
+          detail={
+            allBudget
+              ? "moyenne pondérée par le budget des zones"
+              : "moyenne simple des zones"
+          }
           tone="blue"
           progress={averageProgress}
         />
         <Kpi
           label="HEURES CONSOMMÉES"
-          value={`${allDone.toLocaleString("fr-FR")} h`}
-          detail={`sur ${allBudget.toLocaleString("fr-FR")} h budgétées`}
+          value={hoursLabel(allDone)}
+          detail={`pour ${hoursLabel(allBudget)} réparties sur les zones`}
           tone="gold"
         />
         <Kpi
@@ -317,10 +343,7 @@ export function Zones({
               (sum, allocation) => sum + allocation.allocated_hours,
               0,
             );
-            const zoneDone = relatedTasks.reduce(
-              (sum, allocation) => sum + allocation.done,
-              0,
-            );
+            const zoneDone = zoneHours[zone.id] ?? 0;
             const pct = zoneBudget
               ? Math.round((zoneDone / zoneBudget) * 100)
               : 0;
@@ -349,7 +372,9 @@ export function Zones({
                   <span>
                     <small>HEURES</small>
                     <b>
-                      {zoneDone} / {zoneBudget} h
+                      {zoneBudget
+                        ? `${hoursLabel(zoneDone)} / ${hoursLabel(zoneBudget)}`
+                        : hoursLabel(zoneDone)}
                     </b>
                   </span>
                   <span>
@@ -365,7 +390,11 @@ export function Zones({
                     }}
                   />
                 </div>
-                <small>{pct}% du budget d’heures consommé</small>
+                <small>
+                  {zoneBudget
+                    ? `${pct} % du budget d’heures consommé`
+                    : "Aucun budget réparti sur cette zone"}
+                </small>
               </button>
             );
           })}
@@ -408,11 +437,11 @@ export function Zones({
               <div>
                 <small>CONSOMMATION</small>
                 <b>{consumption}%</b>
-                <span>{done} h réalisées</span>
+                <span>{hoursLabel(done)} réalisées</span>
               </div>
               <div>
                 <small>RESTANT</small>
-                <b>{budget - done} h</b>
+                <b>{hoursLabel(budget - done)}</b>
                 <span>budget disponible</span>
               </div>
             </div>
@@ -432,7 +461,7 @@ export function Zones({
                   setShowAllocation(true);
                 }}
               >
-                ＋ Allouer un budget
+                <Icon name="plus" size={18} /> Allouer un budget
               </button>
             </div>
             <div className="zone-task-head">
@@ -515,13 +544,14 @@ export function Zones({
                 </h3>
               </div>
               <button
+                aria-label="Fermer"
                 type="button"
                 onClick={() => {
                   setShowZone(false);
                   setEditingZone(null);
                 }}
               >
-                ×
+                <Icon name="close" />
               </button>
             </div>
             <label>
@@ -601,6 +631,7 @@ export function Zones({
                     </h3>
                   </div>
                   <button
+                    aria-label="Fermer"
                     type="button"
                     onClick={() => {
                       setShowAllocation(false);
@@ -608,7 +639,7 @@ export function Zones({
                       setError("");
                     }}
                   >
-                    ×
+                    <Icon name="close" />
                   </button>
                 </div>
                 <label>

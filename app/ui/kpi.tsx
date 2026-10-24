@@ -7,18 +7,9 @@ type KpiProps = {
   tone: string;
   ring?: number;
   progress?: number;
-  avatars?: boolean;
 };
 
-export function Kpi({
-  label,
-  value,
-  detail,
-  tone,
-  ring,
-  progress,
-  avatars,
-}: KpiProps) {
+export function Kpi({ label, value, detail, tone, ring, progress }: KpiProps) {
   return (
     <div className={`kpi ${tone}`}>
       <span>{label}</span>
@@ -27,7 +18,7 @@ export function Kpi({
           <b>{value}</b>
           <small>{detail}</small>
         </div>
-        {ring && (
+        {ring !== undefined && (
           <div
             className="ring"
             style={{
@@ -38,17 +29,9 @@ export function Kpi({
           </div>
         )}
       </div>
-      {progress && (
+      {progress !== undefined && (
         <div className="bar">
           <i style={{ width: `${progress}%` }} />
-        </div>
-      )}
-      {avatars && (
-        <div className="avatars">
-          <i>JM</i>
-          <i>SB</i>
-          <i>ML</i>
-          <i>+9</i>
         </div>
       )}
     </div>

@@ -4012,3 +4012,104 @@ td .avatar {
   font: 600 15px var(--font-mono);
   color: var(--color-ink);
 }
+
+/* Charte : harmonisation des écrans existants.
+   Placée en dernier pour aligner les anciens composants sur la charte. */
+.page-head {
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.page-head h2 {
+  font: 700 24px var(--font-sans);
+}
+.page-head p {
+  font-size: 15px;
+}
+.page-head button,
+.page-head .primary {
+  white-space: nowrap;
+}
+.panel {
+  border-radius: 14px;
+}
+.primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 10px;
+  font: 600 15px var(--font-sans);
+}
+.primary:hover:not(:disabled) {
+  background: var(--color-brand-strong);
+}
+.primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.page-head button:not(.primary),
+.filters button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  height: auto;
+  padding: 0 16px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: 10px;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font: 600 15px var(--font-sans);
+  cursor: pointer;
+}
+.workspace
+  input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not(
+    [type="file"]
+  ):not(.date-picker),
+.workspace select,
+.workspace textarea {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-line-strong);
+  border-radius: 10px;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font: 400 16px var(--font-sans);
+}
+.workspace textarea {
+  min-height: 88px;
+}
+.workspace input:disabled,
+.workspace select:disabled,
+.workspace textarea:disabled {
+  background: var(--color-ground);
+  color: var(--color-muted);
+}
+.workspace input:focus-visible,
+.workspace select:focus-visible,
+.workspace textarea:focus-visible,
+.workspace button:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+.workspace .stepper input {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+}
+.movement-body label > small {
+  position: static;
+  font-weight: 400;
+}
+.avatar {
+  background: var(--color-ground-strong);
+  color: var(--color-ink);
+}
+.task-modal {
+  border-radius: 16px;
+}

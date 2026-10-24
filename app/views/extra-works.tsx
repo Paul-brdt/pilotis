@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Icon } from "@/app/ui/icons";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 type ExtraWork = {
@@ -115,7 +116,7 @@ export function ExtraWorksManager({
             setShowForm(true);
           }}
         >
-          ＋ Ajouter
+          <Icon name="plus" size={18} /> Ajouter
         </button>
       </div>
       <div className="panel extra-works-panel">
@@ -187,13 +188,14 @@ export function ExtraWorksManager({
                 <h3>{selected ? "Modifier la demande" : "Nouvelle demande"}</h3>
               </div>
               <button
+                aria-label="Fermer"
                 type="button"
                 onClick={() => {
                   setShowForm(false);
                   setSelected(null);
                 }}
               >
-                ×
+                <Icon name="close" />
               </button>
             </div>
             <label>

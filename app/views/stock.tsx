@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Icon } from "@/app/ui/icons";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 const units = ["u", "m", "ml", "kg", "l", "boîte", "paquet"];
@@ -552,7 +553,9 @@ export function StockManager({
           </p>
         </div>
         <div className="stock-actions">
-          <button onClick={exportExcel}>⇩ Export Excel</button>
+          <button onClick={exportExcel}>
+            <Icon name="download" size={18} /> Export Excel
+          </button>
           <button
             onClick={() => {
               setEditingLocation(null);
@@ -560,7 +563,7 @@ export function StockManager({
               setShowLocationManager(true);
             }}
           >
-            ＋ Emplacement
+            <Icon name="plus" size={18} /> Emplacement
           </button>
           <button
             onClick={() => {
@@ -569,7 +572,7 @@ export function StockManager({
               setShowFamilyManager(true);
             }}
           >
-            ＋ Famille
+            <Icon name="plus" size={18} /> Famille
           </button>
           <button className="primary" onClick={() => setMode("entree")}>
             ↓ Nouvelle entrée
@@ -774,7 +777,8 @@ export function StockManager({
                     className="text-action add-stock-item"
                     onClick={() => setShowNewItem(true)}
                   >
-                    ＋ L’article n’existe pas ? L’ajouter
+                    <Icon name="plus" size={18} /> L’article n’existe pas ?
+                    L’ajouter
                   </button>
                 ) : null}
                 <div className="available">
@@ -927,7 +931,7 @@ export function StockManager({
               setOperationKind("outillage");
             }}
           >
-            ＋ Affecter un outil
+            <Icon name="plus" size={18} /> Affecter un outil
           </button>
         </div>
         <div className="stock-table-scroll">
@@ -1135,13 +1139,14 @@ export function StockManager({
                 </h3>
               </div>
               <button
+                aria-label="Fermer"
                 type="button"
                 onClick={() => {
                   setShowNewItem(false);
                   setShowEditItem(false);
                 }}
               >
-                ×
+                <Icon name="close" />
               </button>
             </div>
             <label>
@@ -1237,10 +1242,11 @@ export function StockManager({
                 <h3>Gérer les emplacements</h3>
               </div>
               <button
+                aria-label="Fermer"
                 type="button"
                 onClick={() => setShowLocationManager(false)}
               >
-                ×
+                <Icon name="close" />
               </button>
             </div>
             <form
@@ -1332,8 +1338,12 @@ export function StockManager({
                 <span>CATALOGUE</span>
                 <h3>Gérer les familles</h3>
               </div>
-              <button type="button" onClick={() => setShowFamilyManager(false)}>
-                ×
+              <button
+                aria-label="Fermer"
+                type="button"
+                onClick={() => setShowFamilyManager(false)}
+              >
+                <Icon name="close" />
               </button>
             </div>
             <form key={editingFamily?.id ?? "new-family"} onSubmit={saveFamily}>
@@ -1412,8 +1422,12 @@ export function StockManager({
                 <span>FICHE ARTICLE · {selected.reference}</span>
                 <h3>{selected.name}</h3>
               </div>
-              <button type="button" onClick={() => setShowDetail(false)}>
-                ×
+              <button
+                aria-label="Fermer"
+                type="button"
+                onClick={() => setShowDetail(false)}
+              >
+                <Icon name="close" />
               </button>
             </div>
             <div className="stock-detail-actions">
