@@ -69,28 +69,28 @@ Les feuilles d’heures intérimaires sont alimentées par la présence du matin
 
 ## Rôles
 
-| Rôle | Usage principal |
-| --- | --- |
-| Administrateur | Paramétrage, utilisateurs et accès complet |
+| Rôle                       | Usage principal                                   |
+| -------------------------- | ------------------------------------------------- |
+| Administrateur             | Paramétrage, utilisateurs et accès complet        |
 | Bureau / chargé d’affaires | Pilotage, validations et gestion des référentiels |
-| Conducteur de travaux | Suivi opérationnel, personnel et validations |
-| Chef de chantier | Présences et saisies terrain |
-| Magasinier | Articles, stocks, emplacements et équipements |
-| Consultation | Accès en lecture selon les droits accordés |
+| Conducteur de travaux      | Suivi opérationnel, personnel et validations      |
+| Chef de chantier           | Présences et saisies terrain                      |
+| Magasinier                 | Articles, stocks, emplacements et équipements     |
+| Consultation               | Accès en lecture selon les droits accordés        |
 
 Les autorisations sont contrôlées côté interface, côté API et dans Supabase grâce aux politiques RLS.
 
 ## Architecture technique
 
-| Composant | Technologie |
-| --- | --- |
-| Interface et API | Next.js 16 — App Router |
+| Composant             | Technologie                 |
+| --------------------- | --------------------------- |
+| Interface et API      | Next.js 16 — App Router     |
 | Interface utilisateur | React 19, TypeScript et CSS |
-| Base de données | PostgreSQL via Supabase |
-| Authentification | Supabase Auth |
-| Contrôle d’accès | Supabase Row Level Security |
-| Génération PDF | `pdf-lib` |
-| Hébergement | Vercel |
+| Base de données       | PostgreSQL via Supabase     |
+| Authentification      | Supabase Auth               |
+| Contrôle d’accès      | Supabase Row Level Security |
+| Génération PDF        | `pdf-lib`                   |
+| Hébergement           | Vercel                      |
 
 ```text
 Navigateur
@@ -107,11 +107,22 @@ Navigateur
 ```text
 app/
 ├── api/                    Routes serveur
-├── extra-works.tsx         Travaux supplémentaires
-├── magasin.tsx             Engins, outillage et moyens d’accès
-├── personnel.tsx           Présence du matin et horaires
-├── stock.tsx               Stock, mouvements et référentiels
-└── page.tsx                Application et navigation principales
+├── views/                  Un fichier par écran
+│   ├── dashboard.tsx       Vue d’ensemble
+│   ├── personnel.tsx       Présence du matin et horaires
+│   ├── pointage.tsx        Affectation journalière
+│   ├── teams.tsx           Équipes
+│   ├── interim.tsx         Intérim et feuilles d’heures
+│   ├── tasks.tsx           Tâches et budgets
+│   ├── zones.tsx           Zones de travail
+│   ├── cables.tsx          Carnet de câbles
+│   ├── extra-works.tsx     Travaux supplémentaires
+│   ├── stock.tsx           Stock, mouvements et référentiels
+│   ├── magasin.tsx         Engins, outillage et moyens d’accès
+│   └── settings.tsx        Paramètres
+├── ui/                     Composants d’interface réutilisables
+├── shared.ts               Types et rôles partagés
+└── page.tsx                Authentification et navigation principales
 
 lib/
 ├── supabase.ts             Client Supabase
@@ -173,13 +184,14 @@ Toutes les tables exposées doivent conserver la Row Level Security activée. N�
 
 ## Scripts disponibles
 
-| Commande | Description |
-| --- | --- |
-| `npm run dev` | Démarre le serveur de développement |
-| `npm run build` | Crée une version de production et vérifie TypeScript |
-| `npm run start` | Démarre la version compilée |
-| `npm run lint` | Exécute ESLint |
-| `npm test` | Exécute actuellement la compilation de contrôle |
+| Commande         | Description                                          |
+| ---------------- | ---------------------------------------------------- |
+| `npm run dev`    | Démarre le serveur de développement                  |
+| `npm run build`  | Crée une version de production et vérifie TypeScript |
+| `npm run start`  | Démarre la version compilée                          |
+| `npm run lint`   | Exécute ESLint                                       |
+| `npm run format` | Formate le code avec Prettier                        |
+| `npm test`       | Exécute actuellement la compilation de contrôle      |
 
 ## Déploiement Vercel
 
