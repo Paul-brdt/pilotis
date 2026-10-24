@@ -36,21 +36,24 @@ export function Tasks({
   async function load() {
     setLoading(true);
     const db = createSupabaseBrowserClient();
-    const [
-      { data: loadedTasks, error: tasksError },
-      { data: entries },
-    ] = await Promise.all([
-      db
-        .from("tasks")
-        .select("id,code,name,budget_hours")
-        .eq(
-          "project_id",
-          (await db.from("projects").select("id").eq("code", "24-018").single())
-            .data?.id ?? "",
-        )
-        .order("code"),
-      db.from("time_entries").select("task_id,hours"),
-    ]);
+    const [{ data: loadedTasks, error: tasksError }, { data: entries }] =
+      await Promise.all([
+        db
+          .from("tasks")
+          .select("id,code,name,budget_hours")
+          .eq(
+            "project_id",
+            (
+              await db
+                .from("projects")
+                .select("id")
+                .eq("code", "24-018")
+                .single()
+            ).data?.id ?? "",
+          )
+          .order("code"),
+        db.from("time_entries").select("task_id,hours"),
+      ]);
     if (tasksError) {
       toast("Impossible de charger les tâches");
       setLoading(false);
@@ -122,8 +125,7 @@ export function Tasks({
     setShowHistory(task);
   }
   const formTask =
-    editing ??
-    ({ code: "", name: "", budget_hours: 0 } as TaskRow);
+    editing ?? ({ code: "", name: "", budget_hours: 0 } as TaskRow);
   return (
     <div className="content page-content">
       <div className="page-head">
@@ -140,7 +142,8 @@ export function Tasks({
       </div>
       <div className="task-toolbar">
         <span>
-          {taskRows.length} type{taskRows.length > 1 ? "s" : ""} de tâche · budgets sans affectation de zone
+          {taskRows.length} type{taskRows.length > 1 ? "s" : ""} de tâche ·
+          budgets sans affectation de zone
         </span>
       </div>
       {loading ? (

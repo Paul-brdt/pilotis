@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start",
     "test": "next build",
-    "lint": "eslint . --ignore-pattern .next"
+    "lint": "eslint . --ignore-pattern .next",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "@supabase/ssr": "^0.7.0",
@@ -27,6 +28,7 @@
     "@types/react-dom": "19.2.3",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
+    "prettier": "3.9.10",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3"
   },

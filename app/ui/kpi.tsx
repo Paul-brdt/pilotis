@@ -1,6 +1,5 @@
 "use client";
 
-
 type KpiProps = {
   label: string;
   value: string;
@@ -11,7 +10,15 @@ type KpiProps = {
   avatars?: boolean;
 };
 
-export function Kpi({ label, value, detail, tone, ring, progress, avatars }: KpiProps) {
+export function Kpi({
+  label,
+  value,
+  detail,
+  tone,
+  ring,
+  progress,
+  avatars,
+}: KpiProps) {
   return (
     <div className={`kpi ${tone}`}>
       <span>{label}</span>

@@ -13,23 +13,46 @@ export function Teams({
 }) {
   const [rows, setRows] = useState<PersonRow[]>([]);
   const [agencyRows, setAgencyRows] = useState<AgencyRow[]>([]);
-  const [qualificationRows, setQualificationRows] = useState<QualificationRow[]>([]);
+  const [qualificationRows, setQualificationRows] = useState<
+    QualificationRow[]
+  >([]);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<PersonRow | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [contractType, setContractType] = useState<"interne" | "interimaire">("interne");
+  const [contractType, setContractType] = useState<"interne" | "interimaire">(
+    "interne",
+  );
   async function load() {
     const db = createSupabaseBrowserClient();
     const project = (
       await db.from("projects").select("id").eq("code", "24-018").single()
     ).data;
     if (!project) return;
-    const [{ data }, { data: loadedAgencies }, { data: loadedQualifications }] = await Promise.all([
-      db.from("people").select("id,full_name,qualification,contract_type,coefficient,active,agency_id,agencies(name)").eq("project_id", project.id).order("full_name"),
-      db.from("agencies").select("id,name,code,address,postal_code,city,contact_name,phone,email,active").eq("project_id", project.id).eq("active", true).order("name"),
-      db.from("qualifications").select("id,name,active").eq("project_id", project.id).eq("active", true).order("name"),
-    ]);
+    const [{ data }, { data: loadedAgencies }, { data: loadedQualifications }] =
+      await Promise.all([
+        db
+          .from("people")
+          .select(
+            "id,full_name,qualification,contract_type,coefficient,active,agency_id,agencies(name)",
+          )
+          .eq("project_id", project.id)
+          .order("full_name"),
+        db
+          .from("agencies")
+          .select(
+            "id,name,code,address,postal_code,city,contact_name,phone,email,active",
+          )
+          .eq("project_id", project.id)
+          .eq("active", true)
+          .order("name"),
+        db
+          .from("qualifications")
+          .select("id,name,active")
+          .eq("project_id", project.id)
+          .eq("active", true)
+          .order("name"),
+      ]);
     setRows((data ?? []) as unknown as PersonRow[]);
     setAgencyRows((loadedAgencies ?? []) as AgencyRow[]);
     setQualificationRows((loadedQualifications ?? []) as QualificationRow[]);
@@ -98,7 +121,8 @@ export function Teams({
         <div>
           <h2>Équipes du chantier</h2>
           <p>
-            Gérez les personnes qui seront proposées à l’affectation journalière.
+            Gérez les personnes qui seront proposées à l’affectation
+            journalière.
           </p>
         </div>
         <button
@@ -221,9 +245,13 @@ export function Teams({
                 defaultValue={editing?.qualification ?? ""}
                 required
               >
-                <option value="" disabled>Sélectionner une qualification</option>
+                <option value="" disabled>
+                  Sélectionner une qualification
+                </option>
                 {qualificationRows.map((qualification) => (
-                  <option key={qualification.id} value={qualification.name}>{qualification.name}</option>
+                  <option key={qualification.id} value={qualification.name}>
+                    {qualification.name}
+                  </option>
                 ))}
               </select>
             </label>
@@ -232,7 +260,11 @@ export function Teams({
               <select
                 name="contractType"
                 value={contractType}
-                onChange={(event) => setContractType(event.target.value as "interne" | "interimaire")}
+                onChange={(event) =>
+                  setContractType(
+                    event.target.value as "interne" | "interimaire",
+                  )
+                }
               >
                 <option value="interne">Interne</option>
                 <option value="interimaire">Intérimaire</option>
@@ -241,13 +273,25 @@ export function Teams({
             {contractType === "interimaire" && (
               <label>
                 Agence d’intérim
-                <select name="agencyId" defaultValue={editing?.agency_id ?? ""} required>
-                  <option value="" disabled>Sélectionner une agence existante</option>
+                <select
+                  name="agencyId"
+                  defaultValue={editing?.agency_id ?? ""}
+                  required
+                >
+                  <option value="" disabled>
+                    Sélectionner une agence existante
+                  </option>
                   {agencyRows.map((agency) => (
-                    <option key={agency.id} value={agency.id}>{agency.code} · {agency.name}</option>
+                    <option key={agency.id} value={agency.id}>
+                      {agency.code} · {agency.name}
+                    </option>
                   ))}
                 </select>
-                {agencyRows.length === 0 && <small>Créez d’abord une agence dans Intérim & feuilles.</small>}
+                {agencyRows.length === 0 && (
+                  <small>
+                    Créez d’abord une agence dans Intérim & feuilles.
+                  </small>
+                )}
               </label>
             )}
             <label>

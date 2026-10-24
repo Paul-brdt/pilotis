@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { type View, type CurrentProfile, type ProjectIdentity, roleLabel } from "@/app/shared";
+import {
+  type View,
+  type CurrentProfile,
+  type ProjectIdentity,
+  roleLabel,
+} from "@/app/shared";
 import { Cables } from "@/app/views/cables";
 import { Dashboard } from "@/app/views/dashboard";
 import { ExtraWorksManager } from "@/app/views/extra-works";
@@ -49,8 +54,12 @@ export default function Home() {
   const [accountError, setAccountError] = useState("");
   const [accountSaving, setAccountSaving] = useState(false);
   const [view, setView] = useState<View>("dashboard");
-  const [mobileMenuOpen,setMobileMenuOpen]=useState(false);
-  const [openNavSections,setOpenNavSections]=useState({personnel:false,magasin:false,chantier:false});
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [openNavSections, setOpenNavSections] = useState({
+    personnel: false,
+    magasin: false,
+    chantier: false,
+  });
   const [notice, setNotice] = useState("");
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(
@@ -123,14 +132,19 @@ export default function Home() {
     };
   }, [accountMenuOpen]);
 
-  useEffect(()=>{
-    if(!mobileMenuOpen)return;
-    const previousOverflow=document.body.style.overflow;
-    document.body.style.overflow="hidden";
-    const closeOnEscape=(event:KeyboardEvent)=>{if(event.key==="Escape")setMobileMenuOpen(false)};
-    document.addEventListener("keydown",closeOnEscape);
-    return()=>{document.body.style.overflow=previousOverflow;document.removeEventListener("keydown",closeOnEscape)};
-  },[mobileMenuOpen]);
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileMenuOpen(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [mobileMenuOpen]);
 
   async function authenticate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -174,11 +188,15 @@ export default function Home() {
     const passwordConfirmation = String(form.get("passwordConfirmation") ?? "");
 
     if (newPassword.length < 8) {
-      setAccountError("Le nouveau mot de passe doit contenir au moins 8 caractères.");
+      setAccountError(
+        "Le nouveau mot de passe doit contenir au moins 8 caractères.",
+      );
       return;
     }
     if (newPassword !== passwordConfirmation) {
-      setAccountError("La confirmation ne correspond pas au nouveau mot de passe.");
+      setAccountError(
+        "La confirmation ne correspond pas au nouveau mot de passe.",
+      );
       return;
     }
     if (currentPassword === newPassword) {
@@ -247,10 +265,7 @@ export default function Home() {
             />
           </label>
           {authError && <div className="auth-error">{authError}</div>}
-          <button
-            className="primary"
-            type="submit"
-          >
+          <button className="primary" type="submit">
             Se connecter
           </button>
         </form>
@@ -282,15 +297,29 @@ export default function Home() {
 
   return (
     <main className="app-shell">
-      {mobileMenuOpen?<button type="button" className="mobile-menu-backdrop" aria-label="Fermer le menu" onClick={()=>setMobileMenuOpen(false)}/>:null}
-      <aside className={`sidebar${mobileMenuOpen?" mobile-open":""}`}>
+      {mobileMenuOpen ? (
+        <button
+          type="button"
+          className="mobile-menu-backdrop"
+          aria-label="Fermer le menu"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      ) : null}
+      <aside className={`sidebar${mobileMenuOpen ? " mobile-open" : ""}`}>
         <div className="brand">
           <span className="brandmark">P</span>
           <div>
             <b>PILOTIS</b>
             <small>CHANTIER ÉLECTRIQUE</small>
           </div>
-          <button type="button" className="sidebar-mobile-close" aria-label="Fermer le menu" onClick={()=>setMobileMenuOpen(false)}>×</button>
+          <button
+            type="button"
+            className="sidebar-mobile-close"
+            aria-label="Fermer le menu"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            ×
+          </button>
         </div>
         <div className="project-switch">
           <span>CHANTIER ACTIF</span>
@@ -298,36 +327,115 @@ export default function Home() {
           <small>
             {[projectIdentity?.location, projectIdentity?.code]
               .filter(Boolean)
-              .join(" · ") || "—"} ↕
+              .join(" · ") || "—"}{" "}
+            ↕
           </small>
         </div>
         <nav>
           {nav.slice(0, 1).map(([id, icon, label]) => (
             <button
               key={id}
-              onClick={() => {setView(id);setMobileMenuOpen(false)}}
+              onClick={() => {
+                setView(id);
+                setMobileMenuOpen(false);
+              }}
               className={view === id ? "active" : ""}
             >
               <i>{icon}</i>
               {label}
             </button>
           ))}
-          <button type="button" className="nav-section-toggle" aria-expanded={openNavSections.personnel} onClick={()=>setOpenNavSections(current=>({...current,personnel:!current.personnel}))}><span>PERSONNEL</span><i>{openNavSections.personnel?"⌃":"⌄"}</i></button>
-          {openNavSections.personnel&&personnelNav.map(([id, icon, label]) => (
-            <button key={id} onClick={() => {setView(id);setMobileMenuOpen(false)}} className={view === id ? "active" : ""}><i>{icon}</i>{label}</button>
-          ))}
-          <button type="button" className="nav-section-toggle" aria-expanded={openNavSections.magasin} onClick={()=>setOpenNavSections(current=>({...current,magasin:!current.magasin}))}><span>MAGASIN</span><i>{openNavSections.magasin?"⌃":"⌄"}</i></button>
-          {openNavSections.magasin&&magasinNav.map(([id, icon, label]) => (
-            <button key={id} onClick={() => {setView(id);setMobileMenuOpen(false)}} className={view === id ? "active" : ""}><i>{icon}</i>{label}</button>
-          ))}
-          <button type="button" className="nav-section-toggle" aria-expanded={openNavSections.chantier} onClick={()=>setOpenNavSections(current=>({...current,chantier:!current.chantier}))}><span>CHANTIER</span><i>{openNavSections.chantier?"⌃":"⌄"}</i></button>
-          {openNavSections.chantier&&nav.slice(1).map(([id, icon, label]) => (
-            <button key={id} onClick={() => {setView(id);setMobileMenuOpen(false)}} className={view === id ? "active" : ""}><i>{icon}</i>{label}</button>
-          ))}
+          <button
+            type="button"
+            className="nav-section-toggle"
+            aria-expanded={openNavSections.personnel}
+            onClick={() =>
+              setOpenNavSections((current) => ({
+                ...current,
+                personnel: !current.personnel,
+              }))
+            }
+          >
+            <span>PERSONNEL</span>
+            <i>{openNavSections.personnel ? "⌃" : "⌄"}</i>
+          </button>
+          {openNavSections.personnel &&
+            personnelNav.map(([id, icon, label]) => (
+              <button
+                key={id}
+                onClick={() => {
+                  setView(id);
+                  setMobileMenuOpen(false);
+                }}
+                className={view === id ? "active" : ""}
+              >
+                <i>{icon}</i>
+                {label}
+              </button>
+            ))}
+          <button
+            type="button"
+            className="nav-section-toggle"
+            aria-expanded={openNavSections.magasin}
+            onClick={() =>
+              setOpenNavSections((current) => ({
+                ...current,
+                magasin: !current.magasin,
+              }))
+            }
+          >
+            <span>MAGASIN</span>
+            <i>{openNavSections.magasin ? "⌃" : "⌄"}</i>
+          </button>
+          {openNavSections.magasin &&
+            magasinNav.map(([id, icon, label]) => (
+              <button
+                key={id}
+                onClick={() => {
+                  setView(id);
+                  setMobileMenuOpen(false);
+                }}
+                className={view === id ? "active" : ""}
+              >
+                <i>{icon}</i>
+                {label}
+              </button>
+            ))}
+          <button
+            type="button"
+            className="nav-section-toggle"
+            aria-expanded={openNavSections.chantier}
+            onClick={() =>
+              setOpenNavSections((current) => ({
+                ...current,
+                chantier: !current.chantier,
+              }))
+            }
+          >
+            <span>CHANTIER</span>
+            <i>{openNavSections.chantier ? "⌃" : "⌄"}</i>
+          </button>
+          {openNavSections.chantier &&
+            nav.slice(1).map(([id, icon, label]) => (
+              <button
+                key={id}
+                onClick={() => {
+                  setView(id);
+                  setMobileMenuOpen(false);
+                }}
+                className={view === id ? "active" : ""}
+              >
+                <i>{icon}</i>
+                {label}
+              </button>
+            ))}
         </nav>
         <div className="sidebar-bottom">
           <button
-            onClick={() => {setView("settings");setMobileMenuOpen(false)}}
+            onClick={() => {
+              setView("settings");
+              setMobileMenuOpen(false);
+            }}
             className={view === "settings" ? "active" : ""}
           >
             <i>⚙</i> Paramètres
@@ -382,7 +490,12 @@ export default function Home() {
                 >
                   <i>⌘</i> Changer le mot de passe
                 </button>
-                <button className="account-signout" type="button" role="menuitem" onClick={signOut}>
+                <button
+                  className="account-signout"
+                  type="button"
+                  role="menuitem"
+                  onClick={signOut}
+                >
                   <i>↪</i> Se déconnecter
                 </button>
               </div>
@@ -393,7 +506,15 @@ export default function Home() {
 
       <section className="workspace">
         <header>
-          <button type="button" className="mobile-menu" aria-label="Ouvrir le menu" aria-expanded={mobileMenuOpen} onClick={()=>setMobileMenuOpen(true)}>☰</button>
+          <button
+            type="button"
+            className="mobile-menu"
+            aria-label="Ouvrir le menu"
+            aria-expanded={mobileMenuOpen}
+            onClick={() => setMobileMenuOpen(true)}
+          >
+            ☰
+          </button>
           <div>
             <span className="crumb">
               CHANTIERS / {projectIdentity?.code ?? "…"}
@@ -401,7 +522,9 @@ export default function Home() {
             <h1>
               {view === "dashboard"
                 ? "Bonjour,"
-                : ([...personnelNav, ...magasinNav, ...nav].find((n) => n[0] === view)?.[2] ?? "Paramètres")}
+                : ([...personnelNav, ...magasinNav, ...nav].find(
+                    (n) => n[0] === view,
+                  )?.[2] ?? "Paramètres")}
             </h1>
           </div>
           <div className="header-actions">
@@ -415,7 +538,8 @@ export default function Home() {
                 aria-label="Sélectionner la date de travail"
                 value={workDate}
                 onChange={(event) => {
-                  if (event.target.value) setSelectedDate(new Date(`${event.target.value}T12:00:00`));
+                  if (event.target.value)
+                    setSelectedDate(new Date(`${event.target.value}T12:00:00`));
                 }}
               />
               <button aria-label="Jour suivant" onClick={() => moveDate(1)}>
@@ -434,7 +558,13 @@ export default function Home() {
         {view === "dashboard" && (
           <Dashboard setView={setView} toast={toast} workDate={workDate} />
         )}
-        {view === "presence" && <MorningPresence workDate={workDate} dateLabel={dateLabel} toast={toast} />}
+        {view === "presence" && (
+          <MorningPresence
+            workDate={workDate}
+            dateLabel={dateLabel}
+            toast={toast}
+          />
+        )}
         {view === "pointage" && (
           <Pointage
             accessToken={accessToken}
@@ -446,16 +576,43 @@ export default function Home() {
         {view === "equipes" && (
           <Teams accessToken={accessToken} toast={toast} />
         )}
-        {view === "interim" && <Interim accessToken={accessToken} workDate={workDate} projectIdentity={projectIdentity} toast={toast} />}
-        {view === "taches" && <Tasks accessToken={accessToken} toast={toast} />}
-        {view === "zones" && (
-          <Zones accessToken={accessToken} toast={toast} />
+        {view === "interim" && (
+          <Interim
+            accessToken={accessToken}
+            workDate={workDate}
+            projectIdentity={projectIdentity}
+            toast={toast}
+          />
         )}
-        {view === "stock" && <StockManager toast={toast} accessToken={accessToken} />}
-        {view === "engins" && <MagasinManager section="engin" toast={toast} accessToken={accessToken} />}
-        {view === "outillage" && <MagasinManager section="outillage" toast={toast} accessToken={accessToken} />}
-        {view === "acces" && <MagasinManager section="acces" toast={toast} accessToken={accessToken} />}
-        {view === "travaux-supplementaires" && <ExtraWorksManager toast={toast} accessToken={accessToken} />}
+        {view === "taches" && <Tasks accessToken={accessToken} toast={toast} />}
+        {view === "zones" && <Zones accessToken={accessToken} toast={toast} />}
+        {view === "stock" && (
+          <StockManager toast={toast} accessToken={accessToken} />
+        )}
+        {view === "engins" && (
+          <MagasinManager
+            section="engin"
+            toast={toast}
+            accessToken={accessToken}
+          />
+        )}
+        {view === "outillage" && (
+          <MagasinManager
+            section="outillage"
+            toast={toast}
+            accessToken={accessToken}
+          />
+        )}
+        {view === "acces" && (
+          <MagasinManager
+            section="acces"
+            toast={toast}
+            accessToken={accessToken}
+          />
+        )}
+        {view === "travaux-supplementaires" && (
+          <ExtraWorksManager toast={toast} accessToken={accessToken} />
+        )}
         {view === "cables" && <Cables toast={toast} />}
         {view === "settings" && (
           <Settings
@@ -485,25 +642,53 @@ export default function Home() {
                 ×
               </button>
             </div>
-            <p>Utilisez au moins 8 caractères. Une phrase de passe unique est recommandée.</p>
+            <p>
+              Utilisez au moins 8 caractères. Une phrase de passe unique est
+              recommandée.
+            </p>
             <label>
               Mot de passe actuel
-              <input name="currentPassword" type="password" autoComplete="current-password" required />
+              <input
+                name="currentPassword"
+                type="password"
+                autoComplete="current-password"
+                required
+              />
             </label>
             <label>
               Nouveau mot de passe
-              <input name="newPassword" type="password" autoComplete="new-password" minLength={8} required />
+              <input
+                name="newPassword"
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                required
+              />
             </label>
             <label>
               Confirmer le nouveau mot de passe
-              <input name="passwordConfirmation" type="password" autoComplete="new-password" minLength={8} required />
+              <input
+                name="passwordConfirmation"
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                required
+              />
             </label>
             {accountError && <div className="auth-error">{accountError}</div>}
             <div className="account-dialog-actions">
-              <button type="button" onClick={() => setPasswordDialogOpen(false)} disabled={accountSaving}>
+              <button
+                type="button"
+                onClick={() => setPasswordDialogOpen(false)}
+                disabled={accountSaving}
+              >
                 Annuler
               </button>
-              <button className="primary" type="submit" disabled={accountSaving}>
+              <button
+                className="primary"
+                type="submit"
+                disabled={accountSaving}
+              >
                 {accountSaving ? "Modification…" : "Modifier le mot de passe"}
               </button>
             </div>

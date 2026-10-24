@@ -5,7 +5,10 @@ export const dynamic = "force-dynamic";
 async function proxy(request: Request) {
   const authorization = request.headers.get("authorization");
   if (!authorization)
-    return Response.json({ error: "Authentification requise" }, { status: 401 });
+    return Response.json(
+      { error: "Authentification requise" },
+      { status: 401 },
+    );
   const sourceUrl = new URL(request.url);
   const targetUrl = new URL(`${supabaseUrl}/functions/v1/admin-users`);
   targetUrl.search = sourceUrl.search;

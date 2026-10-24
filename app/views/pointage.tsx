@@ -21,7 +21,14 @@ type DailyTimeEntry = {
 
 type DailyAssignment = { hours: number; taskCode: string; zoneCode: string };
 
-type DailyAttendanceTarget = { person_id: string; status: string; scheduled_hours: number | string; regular_hours: number | string; automatic_overtime_hours: number | string; manual_overtime_hours: number | string | null };
+type DailyAttendanceTarget = {
+  person_id: string;
+  status: string;
+  scheduled_hours: number | string;
+  regular_hours: number | string;
+  automatic_overtime_hours: number | string;
+  manual_overtime_hours: number | string | null;
+};
 
 export function Pointage({
   accessToken,
@@ -43,7 +50,9 @@ export function Pointage({
   const [dailyAssignments, setDailyAssignments] = useState<
     Record<string, DailyAssignment[]>
   >({});
-  const [attendanceTargets, setAttendanceTargets] = useState<Record<string, DailyAttendanceTarget>>({});
+  const [attendanceTargets, setAttendanceTargets] = useState<
+    Record<string, DailyAttendanceTarget>
+  >({});
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [taskId, setTaskId] = useState("");
   const [zoneId, setZoneId] = useState("");
@@ -92,7 +101,13 @@ export function Pointage({
         .eq("project_id", project.id)
         .eq("work_date", workDate)
         .order("created_at", { ascending: true }),
-      db.from("daily_attendance").select("person_id,status,scheduled_hours,regular_hours,automatic_overtime_hours,manual_overtime_hours").eq("project_id", project.id).eq("work_date", workDate),
+      db
+        .from("daily_attendance")
+        .select(
+          "person_id,status,scheduled_hours,regular_hours,automatic_overtime_hours,manual_overtime_hours",
+        )
+        .eq("project_id", project.id)
+        .eq("work_date", workDate),
     ]);
     const entries = (dailyEntries ?? []) as unknown as DailyTimeEntry[];
     const totals = entries.reduce<Record<string, number>>((result, entry) => {
@@ -116,7 +131,14 @@ export function Pointage({
     setZoneRows((loadedZones ?? []) as WorkZone[]);
     setAssignedHours(totals);
     setDailyAssignments(summaries);
-    setAttendanceTargets(Object.fromEntries(((attendance ?? []) as DailyAttendanceTarget[]).map((row) => [row.person_id, row])));
+    setAttendanceTargets(
+      Object.fromEntries(
+        ((attendance ?? []) as DailyAttendanceTarget[]).map((row) => [
+          row.person_id,
+          row,
+        ]),
+      ),
+    );
     setTaskId((current) =>
       loadedTasks?.some((task) => task.id === current)
         ? current
@@ -229,7 +251,14 @@ export function Pointage({
             const totalHours = assignedHours[person.id] ?? 0;
             const assignments = dailyAssignments[person.id] ?? [];
             const attendance = attendanceTargets[person.id];
-            const targetHours = attendance?.status === "present" ? Number(attendance.regular_hours) + Number(attendance.manual_overtime_hours ?? attendance.automatic_overtime_hours) : 0;
+            const targetHours =
+              attendance?.status === "present"
+                ? Number(attendance.regular_hours) +
+                  Number(
+                    attendance.manual_overtime_hours ??
+                      attendance.automatic_overtime_hours,
+                  )
+                : 0;
             const remainingHours = targetHours - totalHours;
             return (
               <label
@@ -279,8 +308,29 @@ export function Pointage({
                 >
                   {totalHours.toLocaleString("fr-FR", {
                     maximumFractionDigits: 2,
-                  })} h
-                  {attendance && <small className={remainingHours < 0 ? "over" : remainingHours > 0 ? "under" : "complete"}>{targetHours.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} h cible · {remainingHours > 0 ? `${remainingHours.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} h restantes` : remainingHours < 0 ? `${Math.abs(remainingHours).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} h en trop` : "complet"}</small>}
+                  })}{" "}
+                  h
+                  {attendance && (
+                    <small
+                      className={
+                        remainingHours < 0
+                          ? "over"
+                          : remainingHours > 0
+                            ? "under"
+                            : "complete"
+                      }
+                    >
+                      {targetHours.toLocaleString("fr-FR", {
+                        maximumFractionDigits: 2,
+                      })}{" "}
+                      h cible ·{" "}
+                      {remainingHours > 0
+                        ? `${remainingHours.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} h restantes`
+                        : remainingHours < 0
+                          ? `${Math.abs(remainingHours).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} h en trop`
+                          : "complet"}
+                    </small>
+                  )}
                 </em>
               </label>
             );

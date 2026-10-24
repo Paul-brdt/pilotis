@@ -1,4 +1,3 @@
-
 export type View =
   | "dashboard"
   | "presence"
@@ -40,9 +39,16 @@ export type PersonRow = {
 };
 
 export type AgencyRow = {
-  id: string; name: string; code: string; address: string | null;
-  postal_code: string | null; city: string | null; contact_name: string | null;
-  phone: string | null; email: string | null; active: boolean;
+  id: string;
+  name: string;
+  code: string;
+  address: string | null;
+  postal_code: string | null;
+  city: string | null;
+  contact_name: string | null;
+  phone: string | null;
+  email: string | null;
+  active: boolean;
 };
 
 export type QualificationRow = { id: string; name: string; active: boolean };

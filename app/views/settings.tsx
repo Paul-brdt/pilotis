@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { type CurrentProfile, accessLevels, type QualificationRow } from "@/app/shared";
+import {
+  type CurrentProfile,
+  accessLevels,
+  type QualificationRow,
+} from "@/app/shared";
 import { WorkScheduleSettings } from "@/app/views/personnel";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
@@ -38,13 +42,16 @@ export function Settings({
   onProjectUpdated: () => Promise<void>;
   toast: (message: string) => void;
 }) {
-  const [tab, setTab] = useState<"chantier" | "application" | "horaires" | "qualifications" | "users">(
-    "chantier",
-  );
+  const [tab, setTab] = useState<
+    "chantier" | "application" | "horaires" | "qualifications" | "users"
+  >("chantier");
   const [project, setProject] = useState<ProjectSettings | null>(null);
   const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([]);
-  const [qualificationRows, setQualificationRows] = useState<QualificationRow[]>([]);
-  const [editingQualification, setEditingQualification] = useState<QualificationRow | null>(null);
+  const [qualificationRows, setQualificationRows] = useState<
+    QualificationRow[]
+  >([]);
+  const [editingQualification, setEditingQualification] =
+    useState<QualificationRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showUser, setShowUser] = useState(false);
@@ -53,8 +60,17 @@ export function Settings({
   async function load() {
     setLoading(true);
     const db = createSupabaseBrowserClient();
-    const [{ data: projectData, error: projectError }, { data: loadedQualifications }] = await Promise.all([
-      db.from("projects").select("id,code,name,location,contact_name,contact_email,contact_phone,primary_color,logo_url,session_timeout_minutes").eq("code", "24-018").single(),
+    const [
+      { data: projectData, error: projectError },
+      { data: loadedQualifications },
+    ] = await Promise.all([
+      db
+        .from("projects")
+        .select(
+          "id,code,name,location,contact_name,contact_email,contact_phone,primary_color,logo_url,session_timeout_minutes",
+        )
+        .eq("code", "24-018")
+        .single(),
       db.from("qualifications").select("id,name,active").order("name"),
     ]);
     if (projectError) toast("Impossible de charger les paramètres");
@@ -134,9 +150,7 @@ export function Settings({
         contactPhone: project.contact_phone ?? "",
         primaryColor: project.primary_color || "#27745d",
         logoUrl: project.logo_url ?? "",
-        sessionTimeoutMinutes: Number(
-          form.get("sessionTimeoutMinutes") ?? 30,
-        ),
+        sessionTimeoutMinutes: Number(form.get("sessionTimeoutMinutes") ?? 30),
       });
       toast("Paramètres de l’application enregistrés");
       await load();
@@ -179,34 +193,89 @@ export function Settings({
     }
   }
   async function createQualification(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setSaving(true); setError(""); const form = new FormData(event.currentTarget);
-    try { await send({ kind: "qualification-create", name: String(form.get("name") ?? "") }); toast("Qualification ajoutée"); event.currentTarget.reset(); await load(); }
-    catch (e) { setError(e instanceof Error ? e.message : "Erreur"); } finally { setSaving(false); }
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    const form = new FormData(event.currentTarget);
+    try {
+      await send({
+        kind: "qualification-create",
+        name: String(form.get("name") ?? ""),
+      });
+      toast("Qualification ajoutée");
+      event.currentTarget.reset();
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setSaving(false);
+    }
   }
   async function toggleQualification(qualification: QualificationRow) {
-    setSaving(true); setError("");
-    try { await send({ kind: "qualification-active", qualificationId: qualification.id, active: !qualification.active }); toast(qualification.active ? "Qualification désactivée" : "Qualification réactivée"); await load(); }
-    catch (e) { setError(e instanceof Error ? e.message : "Erreur"); } finally { setSaving(false); }
+    setSaving(true);
+    setError("");
+    try {
+      await send({
+        kind: "qualification-active",
+        qualificationId: qualification.id,
+        active: !qualification.active,
+      });
+      toast(
+        qualification.active
+          ? "Qualification désactivée"
+          : "Qualification réactivée",
+      );
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setSaving(false);
+    }
   }
   async function updateQualification(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editingQualification) return;
-    setSaving(true); setError("");
+    setSaving(true);
+    setError("");
     const form = new FormData(event.currentTarget);
     try {
-      await send({ kind: "qualification-update", qualificationId: editingQualification.id, name: String(form.get("name") ?? "") });
-      toast("Qualification modifiée"); setEditingQualification(null); await load();
-    } catch (e) { setError(e instanceof Error ? e.message : "Erreur"); } finally { setSaving(false); }
+      await send({
+        kind: "qualification-update",
+        qualificationId: editingQualification.id,
+        name: String(form.get("name") ?? ""),
+      });
+      toast("Qualification modifiée");
+      setEditingQualification(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setSaving(false);
+    }
   }
   async function deleteQualification(qualification: QualificationRow) {
-    if (!window.confirm(`Supprimer définitivement la qualification « ${qualification.name} » ?`)) return;
-    setSaving(true); setError("");
+    if (
+      !window.confirm(
+        `Supprimer définitivement la qualification « ${qualification.name} » ?`,
+      )
+    )
+      return;
+    setSaving(true);
+    setError("");
     try {
-      await send({ kind: "qualification-delete", qualificationId: qualification.id });
+      await send({
+        kind: "qualification-delete",
+        qualificationId: qualification.id,
+      });
       toast("Qualification supprimée");
-      if (editingQualification?.id === qualification.id) setEditingQualification(null);
+      if (editingQualification?.id === qualification.id)
+        setEditingQualification(null);
       await load();
-    } catch (e) { setError(e instanceof Error ? e.message : "Erreur"); } finally { setSaving(false); }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setSaving(false);
+    }
   }
   async function deleteUser(user: ManagedUser) {
     if (
@@ -298,8 +367,18 @@ export function Settings({
         >
           Application
         </button>
-        <button className={tab === "horaires" ? "active" : ""} onClick={() => setTab("horaires")}>Horaires</button>
-        <button className={tab === "qualifications" ? "active" : ""} onClick={() => setTab("qualifications")}>Qualifications</button>
+        <button
+          className={tab === "horaires" ? "active" : ""}
+          onClick={() => setTab("horaires")}
+        >
+          Horaires
+        </button>
+        <button
+          className={tab === "qualifications" ? "active" : ""}
+          onClick={() => setTab("qualifications")}
+        >
+          Qualifications
+        </button>
         {isAdministrator && (
           <button
             className={tab === "users" ? "active" : ""}
@@ -439,14 +518,93 @@ export function Settings({
       {tab === "horaires" && <WorkScheduleSettings toast={toast} />}
       {tab === "qualifications" && (
         <div>
-          <form className="panel settings-form" onSubmit={editingQualification ? updateQualification : createQualification}>
-            <div className="panel-title"><div><span>RÉFÉRENTIEL ÉQUIPES</span><h3>Qualifications proposées dans les fiches personnes</h3></div></div>
-            <div className="settings-grid"><label>{editingQualification ? "Modifier la qualification" : "Nouvelle qualification"}<input key={editingQualification?.id ?? "new"} name="name" required defaultValue={editingQualification?.name ?? ""} placeholder="Ex. Électricien N3P2" /></label></div>
-            <div className="settings-actions">{editingQualification && <button type="button" disabled={saving} onClick={() => setEditingQualification(null)}>Annuler</button>}<button className="primary" disabled={saving}>{saving ? "Enregistrement…" : editingQualification ? "Enregistrer la modification" : "Ajouter la qualification"}</button></div>
+          <form
+            className="panel settings-form"
+            onSubmit={
+              editingQualification ? updateQualification : createQualification
+            }
+          >
+            <div className="panel-title">
+              <div>
+                <span>RÉFÉRENTIEL ÉQUIPES</span>
+                <h3>Qualifications proposées dans les fiches personnes</h3>
+              </div>
+            </div>
+            <div className="settings-grid">
+              <label>
+                {editingQualification
+                  ? "Modifier la qualification"
+                  : "Nouvelle qualification"}
+                <input
+                  key={editingQualification?.id ?? "new"}
+                  name="name"
+                  required
+                  defaultValue={editingQualification?.name ?? ""}
+                  placeholder="Ex. Électricien N3P2"
+                />
+              </label>
+            </div>
+            <div className="settings-actions">
+              {editingQualification && (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => setEditingQualification(null)}
+                >
+                  Annuler
+                </button>
+              )}
+              <button className="primary" disabled={saving}>
+                {saving
+                  ? "Enregistrement…"
+                  : editingQualification
+                    ? "Enregistrer la modification"
+                    : "Ajouter la qualification"}
+              </button>
+            </div>
           </form>
           {error && <div className="settings-error">{error}</div>}
           <div className="panel user-management-list">
-            {qualificationRows.map((qualification) => <div className="user-management-row" key={qualification.id}><div><b>{qualification.name}</b><small>{qualification.active ? "Disponible dans les listes" : "Désactivée"}</small></div><span className={qualification.active ? "green-pill" : "status inactive"}>● {qualification.active ? "Active" : "Inactive"}</span><button className="text-action" disabled={saving} onClick={() => setEditingQualification(qualification)}>Modifier</button><button className="text-action" disabled={saving} onClick={() => void toggleQualification(qualification)}>{qualification.active ? "Désactiver" : "Réactiver"}</button><button className="text-action danger" disabled={saving} onClick={() => void deleteQualification(qualification)}>Supprimer</button></div>)}
+            {qualificationRows.map((qualification) => (
+              <div className="user-management-row" key={qualification.id}>
+                <div>
+                  <b>{qualification.name}</b>
+                  <small>
+                    {qualification.active
+                      ? "Disponible dans les listes"
+                      : "Désactivée"}
+                  </small>
+                </div>
+                <span
+                  className={
+                    qualification.active ? "green-pill" : "status inactive"
+                  }
+                >
+                  ● {qualification.active ? "Active" : "Inactive"}
+                </span>
+                <button
+                  className="text-action"
+                  disabled={saving}
+                  onClick={() => setEditingQualification(qualification)}
+                >
+                  Modifier
+                </button>
+                <button
+                  className="text-action"
+                  disabled={saving}
+                  onClick={() => void toggleQualification(qualification)}
+                >
+                  {qualification.active ? "Désactiver" : "Réactiver"}
+                </button>
+                <button
+                  className="text-action danger"
+                  disabled={saving}
+                  onClick={() => void deleteQualification(qualification)}
+                >
+                  Supprimer
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -515,29 +673,17 @@ export function Settings({
                 <span>NOUVEL UTILISATEUR</span>
                 <h3>Créer un accès à PILOTIS</h3>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowUser(false)}
-              >
+              <button type="button" onClick={() => setShowUser(false)}>
                 ×
               </button>
             </div>
             <label>
               Nom complet
-              <input
-                name="fullName"
-                required
-                placeholder="Prénom et nom"
-              />
+              <input name="fullName" required placeholder="Prénom et nom" />
             </label>
             <label>
               Adresse e-mail
-              <input
-                name="email"
-                type="email"
-                required
-                autoComplete="off"
-              />
+              <input name="email" type="email" required autoComplete="off" />
             </label>
             <label>
               Mot de passe temporaire
