@@ -3673,3 +3673,26 @@ td .avatar {
     display: none;
   }
 }
+
+.time-entries {
+  margin-top: 17px;
+  overflow: hidden;
+}
+.time-entries-scroll {
+  overflow-x: auto;
+}
+.time-entries table {
+  min-width: 760px;
+}
+.time-entries td select,
+.time-entries td input {
+  width: 100%;
+  min-width: 90px;
+}
+.time-entry-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+.time-entry-actions button + button {
+  margin-left: 8px;
+}

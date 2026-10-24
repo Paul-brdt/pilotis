@@ -715,65 +715,170 @@ export async function POST(request: Request) {
           if (error) throw error;
         }
       }
-    } else if (body.kind === "time-bulk") {
-      const personIds = Array.isArray(body.personIds)
-        ? body.personIds.map(String).filter(Boolean)
-        : [];
-      const hours = Number(body.hours);
-      const taskId = String(body.taskId ?? "");
-      const zoneId = String(body.zoneId ?? "");
-      const workDate = String(body.workDate ?? "");
+    } else if (
+      ["time-bulk", "time-update", "time-delete"].includes(String(body.kind))
+    ) {
+      const { data: profile } = await db
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
       if (
-        !personIds.length ||
-        !taskId ||
-        !zoneId ||
-        !/^\d{4}-\d{2}-\d{2}$/.test(workDate) ||
-        !Number.isFinite(hours) ||
-        hours <= 0 ||
-        hours > 24
+        !profile ||
+        !["administrateur", "bureau", "conducteur", "chef_chantier"].includes(
+          profile.role,
+        )
       )
-        return Response.json({ error: "Pointage invalide" }, { status: 400 });
-      const [{ data: task }, { data: zone }, { data: activePeople }] =
-        await Promise.all([
-          db
-            .from("tasks")
-            .select("id")
-            .eq("id", taskId)
-            .eq("project_id", project.id)
-            .maybeSingle(),
-          db
-            .from("zones")
-            .select("id")
-            .eq("id", zoneId)
-            .eq("project_id", project.id)
-            .maybeSingle(),
-          db
-            .from("people")
-            .select("id")
-            .eq("project_id", project.id)
-            .eq("active", true)
-            .in("id", personIds),
-        ]);
-      if (!task || !zone || (activePeople?.length ?? 0) !== personIds.length)
         return Response.json(
-          {
-            error: "Une personne, une tâche ou une zone n’est plus disponible.",
-          },
-          { status: 400 },
+          { error: "Vous n’êtes pas autorisé à saisir des heures." },
+          { status: 403 },
         );
-      const { error } = await db.from("time_entries").insert(
-        personIds.map((personId) => ({
+      if (body.kind === "time-bulk") {
+        const personIds = Array.isArray(body.personIds)
+          ? body.personIds.map(String).filter(Boolean)
+          : [];
+        const hours = Number(body.hours);
+        const taskId = String(body.taskId ?? "");
+        const zoneId = String(body.zoneId ?? "");
+        const workDate = String(body.workDate ?? "");
+        if (
+          !personIds.length ||
+          !taskId ||
+          !zoneId ||
+          !/^\d{4}-\d{2}-\d{2}$/.test(workDate) ||
+          !Number.isFinite(hours) ||
+          hours <= 0 ||
+          hours > 24
+        )
+          return Response.json({ error: "Pointage invalide" }, { status: 400 });
+        const [{ data: task }, { data: zone }, { data: activePeople }] =
+          await Promise.all([
+            db
+              .from("tasks")
+              .select("id")
+              .eq("id", taskId)
+              .eq("project_id", project.id)
+              .maybeSingle(),
+            db
+              .from("zones")
+              .select("id")
+              .eq("id", zoneId)
+              .eq("project_id", project.id)
+              .maybeSingle(),
+            db
+              .from("people")
+              .select("id")
+              .eq("project_id", project.id)
+              .eq("active", true)
+              .in("id", personIds),
+          ]);
+        if (!task || !zone || (activePeople?.length ?? 0) !== personIds.length)
+          return Response.json(
+            {
+              error:
+                "Une personne, une tâche ou une zone n’est plus disponible.",
+            },
+            { status: 400 },
+          );
+        const { error } = await db.from("time_entries").insert(
+          personIds.map((personId) => ({
+            project_id: project.id,
+            person_id: personId,
+            task_id: taskId,
+            zone_id: zoneId,
+            work_date: workDate,
+            hours,
+            comment: String(body.comment || ""),
+            created_by: user.id,
+          })),
+        );
+        if (error) throw error;
+      } else {
+        const { data: entry } = await db
+          .from("time_entries")
+          .select("id,person_id,task_id,zone_id,work_date,hours,comment")
+          .eq("id", String(body.entryId ?? ""))
+          .eq("project_id", project.id)
+          .maybeSingle();
+        if (!entry)
+          return Response.json(
+            { error: "Ce pointage n’existe plus." },
+            { status: 404 },
+          );
+        let next: Record<string, unknown> | null = null;
+        if (body.kind === "time-update") {
+          const hours = Number(body.hours);
+          const taskId = String(body.taskId ?? "");
+          const zoneId = String(body.zoneId ?? "");
+          if (
+            !taskId ||
+            !zoneId ||
+            !Number.isFinite(hours) ||
+            hours <= 0 ||
+            hours > 24
+          )
+            return Response.json(
+              { error: "Pointage invalide" },
+              { status: 400 },
+            );
+          const [{ data: task }, { data: zone }] = await Promise.all([
+            db
+              .from("tasks")
+              .select("id")
+              .eq("id", taskId)
+              .eq("project_id", project.id)
+              .maybeSingle(),
+            db
+              .from("zones")
+              .select("id")
+              .eq("id", zoneId)
+              .eq("project_id", project.id)
+              .maybeSingle(),
+          ]);
+          if (!task || !zone)
+            return Response.json(
+              { error: "Cette tâche ou cette zone n’est plus disponible." },
+              { status: 400 },
+            );
+          next = {
+            task_id: taskId,
+            zone_id: zoneId,
+            hours,
+            comment: String(body.comment ?? ""),
+          };
+        }
+        const result = next
+          ? await db
+              .from("time_entries")
+              .update(next)
+              .eq("id", entry.id)
+              .select("id")
+          : await db
+              .from("time_entries")
+              .delete()
+              .eq("id", entry.id)
+              .select("id");
+        if (result.error) throw result.error;
+        // Row Level Security silently skips rows it does not allow, so an
+        // empty result means the database refused the change.
+        if (!result.data?.length)
+          return Response.json(
+            {
+              error:
+                "La base de données a refusé la modification. Appliquez la migration des droits sur les heures.",
+            },
+            { status: 403 },
+          );
+        await db.from("audit_events").insert({
           project_id: project.id,
-          person_id: personId,
-          task_id: taskId,
-          zone_id: zoneId,
-          work_date: workDate,
-          hours,
-          comment: String(body.comment || ""),
-          created_by: user.id,
-        })),
-      );
-      if (error) throw error;
+          action: String(body.kind),
+          entity_type: "time_entry",
+          entity_id: entry.id,
+          payload: { previous: entry, next },
+          actor_id: user.id,
+        });
+        return Response.json({ ok: true });
+      }
     } else if (
       [
         "rental-agency-create",
