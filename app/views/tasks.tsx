@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 type TaskRow = {
@@ -36,25 +37,28 @@ export function Tasks({
   async function load() {
     setLoading(true);
     const db = createSupabaseBrowserClient();
-    const [{ data: loadedTasks, error: tasksError }, { data: entries }] =
-      await Promise.all([
+    const projectId =
+      (await db.from("projects").select("id").eq("code", "24-018").single())
+        .data?.id ?? "";
+    const [
+      { data: loadedTasks, error: tasksError },
+      { data: entries, error: entriesError },
+    ] = await Promise.all([
+      db
+        .from("tasks")
+        .select("id,code,name,budget_hours")
+        .eq("project_id", projectId)
+        .order("code"),
+      fetchAllRows<{ task_id: string; hours: number | string }>((from, to) =>
         db
-          .from("tasks")
-          .select("id,code,name,budget_hours")
-          .eq(
-            "project_id",
-            (
-              await db
-                .from("projects")
-                .select("id")
-                .eq("code", "24-018")
-                .single()
-            ).data?.id ?? "",
-          )
-          .order("code"),
-        db.from("time_entries").select("task_id,hours"),
-      ]);
-    if (tasksError) {
+          .from("time_entries")
+          .select("task_id,hours")
+          .eq("project_id", projectId)
+          .order("id")
+          .range(from, to),
+      ),
+    ]);
+    if (tasksError || entriesError) {
       toast("Impossible de charger les tâches");
       setLoading(false);
       return;

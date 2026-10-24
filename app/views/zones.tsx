@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Kpi } from "@/app/ui/kpi";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 
 type ManagedZone = {
@@ -52,16 +53,26 @@ export function Zones({
       { data: zoneData, error: zoneError },
       { data: taskData },
       { data: allocationData },
-      { data: entries },
+      { data: entries, error: entriesError },
     ] = await Promise.all([
       db.from("zones").select("id,code,name,physical_progress").order("code"),
       db.from("tasks").select("id,code,name,budget_hours").order("code"),
       db
         .from("zone_task_budget_allocations")
         .select("id,zone_id,task_id,allocated_hours"),
-      db.from("time_entries").select("task_id,zone_id,hours"),
+      fetchAllRows<{
+        task_id: string;
+        zone_id: string | null;
+        hours: number | string;
+      }>((from, to) =>
+        db
+          .from("time_entries")
+          .select("task_id,zone_id,hours")
+          .order("id")
+          .range(from, to),
+      ),
     ]);
-    if (zoneError) {
+    if (zoneError || entriesError) {
       setError("Impossible de charger les zones de travail.");
       setLoading(false);
       return;
