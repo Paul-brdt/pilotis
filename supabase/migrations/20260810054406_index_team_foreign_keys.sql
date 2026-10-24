@@ -1,0 +1,1 @@
+create index if not exists people_project_id_idx on public.people(project_id); create index if not exists people_agency_id_idx on public.people(agency_id);

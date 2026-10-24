@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { View, PersonRow } from "@/app/shared";
 import { Kpi } from "@/app/ui/kpi";
+import { fetchAllRows } from "@/lib/fetch-all";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { isoWeekNumber } from "@/lib/timesheet";
 
@@ -143,11 +144,15 @@ export function Dashboard({
           .select("id,code,name,physical_progress")
           .eq("project_id", project.id)
           .order("code"),
-        db
-          .from("time_entries")
-          .select("person_id,task_id,zone_id,work_date,hours,created_at")
-          .eq("project_id", project.id)
-          .order("created_at", { ascending: false }),
+        fetchAllRows<DashboardEntry>((from, to) =>
+          db
+            .from("time_entries")
+            .select("person_id,task_id,zone_id,work_date,hours,created_at")
+            .eq("project_id", project.id)
+            .order("created_at", { ascending: false })
+            .order("id")
+            .range(from, to),
+        ),
         db
           .from("daily_attendance")
           .select(
@@ -269,8 +274,11 @@ export function Dashboard({
     (sum, task) => sum + Number(task.budget_hours || 0),
     0,
   );
+  // Budget consumption is cumulative: every hour booked since the start,
+  // whatever period the dashboard is showing.
+  const cumulativeHours = hours(entries);
   const budgetUsed = totalBudget
-    ? Math.round((totalHours / totalBudget) * 100)
+    ? Math.round((cumulativeHours / totalBudget) * 100)
     : 0;
   const zoneStats = zoneRows
     .map((zone) => ({
@@ -451,7 +459,7 @@ export function Dashboard({
         <Kpi
           label="BUDGET CONSOMMÉ"
           value={loading ? "…" : `${budgetUsed}%`}
-          detail={`${totalBudget.toLocaleString("fr-FR")} h budgétées`}
+          detail={`${cumulativeHours.toLocaleString("fr-FR")} h sur ${totalBudget.toLocaleString("fr-FR")} h budgétées depuis le début`}
           tone="blue"
           progress={Math.min(budgetUsed, 100)}
         />

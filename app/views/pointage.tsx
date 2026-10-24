@@ -13,10 +13,22 @@ type WorkTask = {
 type WorkZone = { id: string; code: string; name: string };
 
 type DailyTimeEntry = {
+  id: string;
   person_id: string;
+  task_id: string;
+  zone_id: string | null;
   hours: number | string;
+  comment: string | null;
   tasks: { code: string } | null;
   zones: { code: string } | null;
+};
+
+type EntryDraft = {
+  id: string;
+  taskId: string;
+  zoneId: string;
+  hours: string;
+  comment: string;
 };
 
 type DailyAssignment = { hours: number; taskCode: string; zoneCode: string };
@@ -58,6 +70,8 @@ export function Pointage({
   const [zoneId, setZoneId] = useState("");
   const [hours, setHours] = useState("8");
   const [comment, setComment] = useState("");
+  const [dayEntries, setDayEntries] = useState<DailyTimeEntry[]>([]);
+  const [entryDraft, setEntryDraft] = useState<EntryDraft | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   async function load() {
@@ -97,7 +111,9 @@ export function Pointage({
         .order("code"),
       db
         .from("time_entries")
-        .select("person_id,hours,tasks(code),zones(code)")
+        .select(
+          "id,person_id,task_id,zone_id,hours,comment,tasks(code),zones(code)",
+        )
         .eq("project_id", project.id)
         .eq("work_date", workDate)
         .order("created_at", { ascending: true }),
@@ -126,6 +142,8 @@ export function Pointage({
       },
       {},
     );
+    setDayEntries(entries);
+    setEntryDraft(null);
     setPeopleRows((persons ?? []) as unknown as PersonRow[]);
     setTaskRows((loadedTasks ?? []) as WorkTask[]);
     setZoneRows((loadedZones ?? []) as WorkZone[]);
@@ -165,6 +183,57 @@ export function Pointage({
         ? current.filter((value) => value !== id)
         : [...current, id],
     );
+  }
+  async function send(body: Record<string, unknown>) {
+    const response = await fetch("/api/operations", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const result = await response.json();
+    if (!response.ok)
+      throw new Error(result.error ?? "Enregistrement impossible");
+  }
+  async function saveEntry() {
+    if (!entryDraft) return;
+    setSaving(true);
+    try {
+      await send({
+        kind: "time-update",
+        entryId: entryDraft.id,
+        taskId: entryDraft.taskId,
+        zoneId: entryDraft.zoneId,
+        hours: Number(entryDraft.hours),
+        comment: entryDraft.comment,
+      });
+      toast("Pointage corrigé");
+      await load();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Correction impossible");
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function deleteEntry(entry: DailyTimeEntry, personName: string) {
+    if (
+      !window.confirm(
+        `Supprimer ${Number(entry.hours).toLocaleString("fr-FR")} h de ${personName} sur ${entry.tasks?.code ?? "cette tâche"} ?`,
+      )
+    )
+      return;
+    setSaving(true);
+    try {
+      await send({ kind: "time-delete", entryId: entry.id });
+      toast("Pointage supprimé");
+      await load();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Suppression impossible");
+    } finally {
+      setSaving(false);
+    }
   }
   async function save() {
     if (!selectedIds.length || !taskId || !zoneId || !Number(hours)) {
@@ -424,6 +493,172 @@ export function Pointage({
             {saving ? "Enregistrement…" : "Enregistrer les affectations"}
           </button>
         </div>
+      </div>
+      <div className="panel time-entries">
+        <div className="panel-title">
+          <div>
+            <span>HEURES SAISIES</span>
+            <h3>
+              {dayEntries.length
+                ? `${dayEntries.length} ligne${dayEntries.length > 1 ? "s" : ""} le ${dateLabel}`
+                : "Aucune heure saisie ce jour"}
+            </h3>
+          </div>
+        </div>
+        {dayEntries.length > 0 && (
+          <div className="time-entries-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>COLLABORATEUR</th>
+                  <th>TÂCHE</th>
+                  <th>ZONE</th>
+                  <th>HEURES</th>
+                  <th>COMMENTAIRE</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {dayEntries.map((entry) => {
+                  const personName =
+                    peopleRows.find((person) => person.id === entry.person_id)
+                      ?.full_name ?? "Collaborateur inactif";
+                  const draft = entryDraft?.id === entry.id ? entryDraft : null;
+                  return (
+                    <tr key={entry.id}>
+                      <td>
+                        <b>{personName}</b>
+                      </td>
+                      {draft ? (
+                        <>
+                          <td>
+                            <select
+                              aria-label="Tâche"
+                              value={draft.taskId}
+                              onChange={(event) =>
+                                setEntryDraft({
+                                  ...draft,
+                                  taskId: event.target.value,
+                                })
+                              }
+                            >
+                              {taskRows.map((task) => (
+                                <option value={task.id} key={task.id}>
+                                  {task.code} · {task.name}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td>
+                            <select
+                              aria-label="Zone"
+                              value={draft.zoneId}
+                              onChange={(event) =>
+                                setEntryDraft({
+                                  ...draft,
+                                  zoneId: event.target.value,
+                                })
+                              }
+                            >
+                              {zoneRows.map((zone) => (
+                                <option value={zone.id} key={zone.id}>
+                                  {zone.code} · {zone.name}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td>
+                            <input
+                              aria-label="Heures"
+                              type="number"
+                              min="0.25"
+                              max="24"
+                              step="0.25"
+                              value={draft.hours}
+                              onChange={(event) =>
+                                setEntryDraft({
+                                  ...draft,
+                                  hours: event.target.value,
+                                })
+                              }
+                            />
+                          </td>
+                          <td>
+                            <input
+                              aria-label="Commentaire"
+                              value={draft.comment}
+                              onChange={(event) =>
+                                setEntryDraft({
+                                  ...draft,
+                                  comment: event.target.value,
+                                })
+                              }
+                            />
+                          </td>
+                          <td className="time-entry-actions">
+                            <button
+                              className="primary"
+                              disabled={saving}
+                              onClick={() => void saveEntry()}
+                            >
+                              Enregistrer
+                            </button>
+                            <button
+                              disabled={saving}
+                              onClick={() => setEntryDraft(null)}
+                            >
+                              Annuler
+                            </button>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td>{entry.tasks?.code ?? "Tâche inconnue"}</td>
+                          <td>{entry.zones?.code ?? "Sans zone"}</td>
+                          <td>
+                            <strong>
+                              {Number(entry.hours).toLocaleString("fr-FR", {
+                                maximumFractionDigits: 2,
+                              })}{" "}
+                              h
+                            </strong>
+                          </td>
+                          <td>{entry.comment || "—"}</td>
+                          <td className="time-entry-actions">
+                            <button
+                              disabled={saving}
+                              onClick={() =>
+                                setEntryDraft({
+                                  id: entry.id,
+                                  taskId: entry.task_id,
+                                  zoneId:
+                                    entry.zone_id ?? zoneRows[0]?.id ?? "",
+                                  hours: String(Number(entry.hours)),
+                                  comment: entry.comment ?? "",
+                                })
+                              }
+                            >
+                              Modifier
+                            </button>
+                            <button
+                              className="danger-button"
+                              disabled={saving}
+                              onClick={() =>
+                                void deleteEntry(entry, personName)
+                              }
+                            >
+                              Supprimer
+                            </button>
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
