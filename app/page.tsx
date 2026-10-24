@@ -542,7 +542,7 @@ export default function Home() {
             </span>
             <h1>
               {activeView === "dashboard"
-                ? "Bonjour,"
+                ? `Bonjour${currentProfile?.full_name ? ` ${currentProfile.full_name.split(/\s+/)[0]}` : ""}`
                 : ([...personnelNav, ...magasinNav, ...nav].find(
                     (n) => n[0] === activeView,
                   )?.[2] ?? "Paramètres")}
@@ -579,7 +579,7 @@ export default function Home() {
         </header>
 
         {activeView === "dashboard" && (
-          <Dashboard setView={openView} toast={toast} workDate={workDate} />
+          <Dashboard setView={openView} workDate={workDate} />
         )}
         {activeView === "presence" && (
           <MorningPresence
