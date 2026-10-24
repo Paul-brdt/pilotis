@@ -31,8 +31,6 @@ type EntryDraft = {
   comment: string;
 };
 
-type DailyAssignment = { hours: number; taskCode: string; zoneCode: string };
-
 type DailyAttendanceTarget = {
   person_id: string;
   status: string;
@@ -59,9 +57,6 @@ export function Pointage({
   const [assignedHours, setAssignedHours] = useState<Record<string, number>>(
     {},
   );
-  const [dailyAssignments, setDailyAssignments] = useState<
-    Record<string, DailyAssignment[]>
-  >({});
   const [attendanceTargets, setAttendanceTargets] = useState<
     Record<string, DailyAttendanceTarget>
   >({});
@@ -131,24 +126,12 @@ export function Pointage({
         (result[entry.person_id] ?? 0) + Number(entry.hours);
       return result;
     }, {});
-    const summaries = entries.reduce<Record<string, DailyAssignment[]>>(
-      (result, entry) => {
-        (result[entry.person_id] ??= []).push({
-          hours: Number(entry.hours),
-          taskCode: entry.tasks?.code ?? "Tâche inconnue",
-          zoneCode: entry.zones?.code ?? "Sans zone",
-        });
-        return result;
-      },
-      {},
-    );
     setDayEntries(entries);
     setEntryDraft(null);
     setPeopleRows((persons ?? []) as unknown as PersonRow[]);
     setTaskRows((loadedTasks ?? []) as WorkTask[]);
     setZoneRows((loadedZones ?? []) as WorkZone[]);
     setAssignedHours(totals);
-    setDailyAssignments(summaries);
     setAttendanceTargets(
       Object.fromEntries(
         ((attendance ?? []) as DailyAttendanceTarget[]).map((row) => [
@@ -173,10 +156,51 @@ export function Pointage({
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [workDate]);
-  const currentTask = taskRows.find((task) => task.id === taskId);
-  const selectedZone = zoneRows.find((zone) => zone.id === zoneId);
-  const availableTasks = taskRows;
-  const availableZones = zoneRows;
+  const hoursLabel = (value: number) =>
+    `${value.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} h`;
+  // Hours a person can still be assigned today: what the morning attendance
+  // recorded (normal + overtime) minus what is already booked.
+  function targetHours(personId: string) {
+    const attendance = attendanceTargets[personId];
+    if (attendance?.status !== "present") return 0;
+    return (
+      Number(attendance.regular_hours) +
+      Number(
+        attendance.manual_overtime_hours ?? attendance.automatic_overtime_hours,
+      )
+    );
+  }
+  const remainingFor = (personId: string) =>
+    targetHours(personId) - (assignedHours[personId] ?? 0);
+  const presentPeople = peopleRows.filter(
+    (person) => attendanceTargets[person.id]?.status === "present",
+  );
+  const otherPeople = peopleRows.filter(
+    (person) => attendanceTargets[person.id]?.status !== "present",
+  );
+  const toAssign = presentPeople.reduce(
+    (sum, person) => sum + Math.max(0, remainingFor(person.id)),
+    0,
+  );
+  const overBooked = peopleRows.reduce(
+    (sum, person) => sum + Math.max(0, -remainingFor(person.id)),
+    0,
+  );
+  const openPeople = presentPeople.filter(
+    (person) => remainingFor(person.id) > 0,
+  );
+  function stepHours(delta: number) {
+    setHours((current) =>
+      String(Math.min(24, Math.max(0.5, (Number(current) || 0) + delta))),
+    );
+  }
+  function selectOpenPeople() {
+    setSelectedIds(
+      selectedIds.length === openPeople.length
+        ? []
+        : openPeople.map((person) => person.id),
+    );
+  }
   function toggle(id: string) {
     setSelectedIds((current) =>
       current.includes(id)
@@ -272,6 +296,51 @@ export function Pointage({
     setComment("");
     await load();
   }
+  function personRow(person: PersonRow) {
+    const target = targetHours(person.id);
+    const assigned = assignedHours[person.id] ?? 0;
+    const remaining = target - assigned;
+    const status = attendanceTargets[person.id]?.status;
+    const state =
+      status !== "present"
+        ? {
+            className: "chip-neutral",
+            label: status ? "Absent" : "Présence non saisie",
+          }
+        : remaining > 0
+          ? {
+              className: "chip-warn",
+              label: `${hoursLabel(remaining)} restantes`,
+            }
+          : remaining < 0
+            ? {
+                className: "chip-danger",
+                label: `${hoursLabel(-remaining)} en trop`,
+              }
+            : { className: "chip-ok", label: "Complet" };
+    const checked = selectedIds.includes(person.id);
+    return (
+      <label
+        className={`assign-person${checked ? " is-selected" : ""}`}
+        key={person.id}
+      >
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={() => toggle(person.id)}
+        />
+        <span className="assign-person-name">
+          <b>{person.full_name}</b>
+          <small>
+            {status === "present"
+              ? `${hoursLabel(target)} présent · ${hoursLabel(assigned)} affectée${assigned > 1 ? "s" : ""}`
+              : person.qualification || "Sans qualification"}
+          </small>
+        </span>
+        <span className={`chip ${state.className}`}>{state.label}</span>
+      </label>
+    );
+  }
   if (loading)
     return (
       <div className="content page-content">
@@ -280,156 +349,111 @@ export function Pointage({
         </div>
       </div>
     );
+  const total = Number(hours || 0) * selectedIds.length;
   return (
-    <div className="content page-content">
-      <div className="page-head">
+    <div className="content page-content assign">
+      <div className="assign-head">
         <div>
-          <h2>Affectations du {dateLabel}</h2>
-          <p>
-            Sélectionnez plusieurs collaborateurs pour leur appliquer la même
-            affectation.
-          </p>
+          <h2>Affectation des heures</h2>
+          <p>{dateLabel}</p>
         </div>
-        <span className="status">● Brouillon</span>
+        <span className="assign-status">
+          {toAssign > 0 && (
+            <span className="chip chip-warn">
+              {hoursLabel(toAssign)} à affecter
+            </span>
+          )}
+          {overBooked > 0 && (
+            <span className="chip chip-danger">
+              {hoursLabel(overBooked)} au-delà de la présence
+            </span>
+          )}
+          {toAssign === 0 && overBooked === 0 && (
+            <span className="chip chip-ok">Tout est affecté</span>
+          )}
+        </span>
       </div>
-      <div className="entry-layout">
-        <div className="panel personnel">
-          <div className="panel-title">
-            <div>
-              <span>PERSONNEL ACTIF</span>
-              <h3>
-                {peopleRows.length} collaborateur
-                {peopleRows.length > 1 ? "s" : ""}
-              </h3>
-            </div>
-            <button
-              onClick={() =>
-                setSelectedIds(
-                  selectedIds.length === peopleRows.length
-                    ? []
-                    : peopleRows.map((person) => person.id),
-                )
-              }
+
+      <section className="assign-card" aria-labelledby="assign-where">
+        <h3 id="assign-where">1 · Quoi et où</h3>
+        <div className="assign-fields">
+          <label className="field">
+            Tâche
+            <select
+              value={taskId}
+              onChange={(event) => setTaskId(event.target.value)}
             >
-              {selectedIds.length === peopleRows.length
-                ? "Tout désélectionner"
-                : "Tout sélectionner"}
-            </button>
-          </div>
-          {peopleRows.map((person) => {
-            const totalHours = assignedHours[person.id] ?? 0;
-            const assignments = dailyAssignments[person.id] ?? [];
-            const attendance = attendanceTargets[person.id];
-            const targetHours =
-              attendance?.status === "present"
-                ? Number(attendance.regular_hours) +
-                  Number(
-                    attendance.manual_overtime_hours ??
-                      attendance.automatic_overtime_hours,
-                  )
-                : 0;
-            const remainingHours = targetHours - totalHours;
-            return (
-              <label
-                className={`person-check ${selectedIds.includes(person.id) ? "selected" : ""}`}
-                key={person.id}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedIds.includes(person.id)}
-                  onChange={() => toggle(person.id)}
-                />
-                <span>
-                  {person.full_name
-                    .split(/\s+/)
-                    .map((part) => part[0])
-                    .slice(0, 2)
-                    .join("")}
-                </span>
-                <div className="person-summary">
-                  <b>{person.full_name}</b>
-                  <small>
-                    {person.qualification ?? "Qualification non renseignée"} ·{" "}
-                    {person.contract_type === "interimaire"
-                      ? "Intérimaire"
-                      : "Interne"}
-                  </small>
-                  {assignments.length > 0 && (
-                    <span className="assignment-summary">
-                      {assignments.map((assignment, index) => (
-                        <small
-                          key={`${assignment.taskCode}-${assignment.zoneCode}-${index}`}
-                        >
-                          {assignment.taskCode} /{" "}
-                          {assignment.hours.toLocaleString("fr-FR", {
-                            maximumFractionDigits: 2,
-                          })}{" "}
-                          h / {assignment.zoneCode}
-                        </small>
-                      ))}
-                    </span>
-                  )}
-                </div>
-                <em
-                  className={
-                    totalHours ? "assigned-hours" : "assigned-hours empty"
-                  }
-                >
-                  {totalHours.toLocaleString("fr-FR", {
-                    maximumFractionDigits: 2,
-                  })}{" "}
-                  h
-                  {attendance && (
-                    <small
-                      className={
-                        remainingHours < 0
-                          ? "over"
-                          : remainingHours > 0
-                            ? "under"
-                            : "complete"
-                      }
-                    >
-                      {targetHours.toLocaleString("fr-FR", {
-                        maximumFractionDigits: 2,
-                      })}{" "}
-                      h cible ·{" "}
-                      {remainingHours > 0
-                        ? `${remainingHours.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} h restantes`
-                        : remainingHours < 0
-                          ? `${Math.abs(remainingHours).toLocaleString("fr-FR", { maximumFractionDigits: 2 })} h en trop`
-                          : "complet"}
-                    </small>
-                  )}
-                </em>
-              </label>
-            );
-          })}
+              {taskRows.map((task) => (
+                <option value={task.id} key={task.id}>
+                  {task.code} · {task.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            Zone
+            <select
+              value={zoneId}
+              onChange={(event) => setZoneId(event.target.value)}
+            >
+              {zoneRows.map((zone) => (
+                <option value={zone.id} key={zone.id}>
+                  {zone.code} · {zone.name}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
-        <div className="panel allocation">
-          <span>AFFECTATION GROUPÉE</span>
-          <h3>
-            {selectedIds.length
-              ? `${selectedIds.length} personne${selectedIds.length > 1 ? "s" : ""} sélectionnée${selectedIds.length > 1 ? "s" : ""}`
-              : "Choisissez les collaborateurs"}
-          </h3>
-          <div className="form-grid">
+      </section>
+
+      <section className="assign-card assign-who" aria-labelledby="assign-who">
+        <div className="assign-card-head">
+          <h3 id="assign-who">2 · Qui</h3>
+          {openPeople.length > 0 && (
+            <button
+              type="button"
+              className="link-button"
+              onClick={selectOpenPeople}
+            >
+              {selectedIds.length === openPeople.length
+                ? "Tout décocher"
+                : "Cocher ceux qui ont des heures restantes"}
+            </button>
+          )}
+        </div>
+        {presentPeople.length === 0 && (
+          <p className="assign-empty">
+            Aucune présence enregistrée ce jour : saisissez d’abord la présence
+            du matin.
+          </p>
+        )}
+        {presentPeople.map(personRow)}
+        {otherPeople.length > 0 && (
+          <details className="assign-others">
+            <summary>
+              {otherPeople.length} personne
+              {otherPeople.length > 1 ? "s" : ""} non présente
+              {otherPeople.length > 1 ? "s" : ""}
+            </summary>
+            {otherPeople.map(personRow)}
+          </details>
+        )}
+      </section>
+
+      <section className="assign-card" aria-labelledby="assign-how-much">
+        <div className="assign-hours">
+          <h3 id="assign-how-much">3 · Combien</h3>
+          <div className="stepper">
+            <button
+              type="button"
+              className="btn btn-secondary"
+              aria-label="Retirer une demi-heure"
+              onClick={() => stepHours(-0.5)}
+            >
+              −
+            </button>
             <label>
-              Tâche
-              <select
-                value={taskId}
-                onChange={(event) => {
-                  setTaskId(event.target.value);
-                }}
-              >
-                {availableTasks.map((task) => (
-                  <option value={task.id} key={task.id}>
-                    {task.code} · {task.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Durée
+              <span className="sr-only">Heures par personne</span>
               <input
                 type="number"
                 min="0.25"
@@ -438,227 +462,178 @@ export function Pointage({
                 value={hours}
                 onChange={(event) => setHours(event.target.value)}
               />
-              <small>heures</small>
+              <span aria-hidden="true">h</span>
             </label>
-          </div>
-          <label>
-            Zone de travail
-            <select
-              value={zoneId}
-              onChange={(event) => setZoneId(event.target.value)}
+            <button
+              type="button"
+              className="btn btn-secondary"
+              aria-label="Ajouter une demi-heure"
+              onClick={() => stepHours(0.5)}
             >
-              {availableZones.map((zone) => (
-                <option value={zone.id} key={zone.id}>
-                  {zone.code} · {zone.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="allocation-card">
-            <i style={{ background: "#397f68" }} />
-            <div>
-              <b>{currentTask?.name ?? "Aucune tâche"}</b>
-              <small>
-                {currentTask?.code ?? ""} ·{" "}
-                {selectedZone?.name ?? "Aucune zone"}
-              </small>
-            </div>
-            <strong>{hours || 0} h</strong>
-          </div>
-          <label>
-            Commentaire
-            <textarea
-              value={comment}
-              onChange={(event) => setComment(event.target.value)}
-              placeholder="Précision facultative sur les travaux réalisés…"
-            />
-          </label>
-          <div className="day-total">
-            <span>Total à enregistrer</span>
-            <b>
-              {(Number(hours || 0) * selectedIds.length).toLocaleString(
-                "fr-FR",
-              )}{" "}
-              h
-            </b>
-            <div className="bar">
-              <i style={{ width: `${Math.min(Number(hours) * 12.5, 100)}%` }} />
-            </div>
-          </div>
-          <button
-            className="save"
-            disabled={saving}
-            onClick={() => void save()}
-          >
-            {saving ? "Enregistrement…" : "Enregistrer les affectations"}
-          </button>
-        </div>
-      </div>
-      <div className="panel time-entries">
-        <div className="panel-title">
-          <div>
-            <span>HEURES SAISIES</span>
-            <h3>
-              {dayEntries.length
-                ? `${dayEntries.length} ligne${dayEntries.length > 1 ? "s" : ""} le ${dateLabel}`
-                : "Aucune heure saisie ce jour"}
-            </h3>
+              +
+            </button>
           </div>
         </div>
-        {dayEntries.length > 0 && (
-          <div className="time-entries-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>COLLABORATEUR</th>
-                  <th>TÂCHE</th>
-                  <th>ZONE</th>
-                  <th>HEURES</th>
-                  <th>COMMENTAIRE</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {dayEntries.map((entry) => {
-                  const personName =
-                    peopleRows.find((person) => person.id === entry.person_id)
-                      ?.full_name ?? "Collaborateur inactif";
-                  const draft = entryDraft?.id === entry.id ? entryDraft : null;
-                  return (
-                    <tr key={entry.id}>
-                      <td>
-                        <b>{personName}</b>
-                      </td>
-                      {draft ? (
-                        <>
-                          <td>
-                            <select
-                              aria-label="Tâche"
-                              value={draft.taskId}
-                              onChange={(event) =>
-                                setEntryDraft({
-                                  ...draft,
-                                  taskId: event.target.value,
-                                })
-                              }
-                            >
-                              {taskRows.map((task) => (
-                                <option value={task.id} key={task.id}>
-                                  {task.code} · {task.name}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td>
-                            <select
-                              aria-label="Zone"
-                              value={draft.zoneId}
-                              onChange={(event) =>
-                                setEntryDraft({
-                                  ...draft,
-                                  zoneId: event.target.value,
-                                })
-                              }
-                            >
-                              {zoneRows.map((zone) => (
-                                <option value={zone.id} key={zone.id}>
-                                  {zone.code} · {zone.name}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td>
-                            <input
-                              aria-label="Heures"
-                              type="number"
-                              min="0.25"
-                              max="24"
-                              step="0.25"
-                              value={draft.hours}
-                              onChange={(event) =>
-                                setEntryDraft({
-                                  ...draft,
-                                  hours: event.target.value,
-                                })
-                              }
-                            />
-                          </td>
-                          <td>
-                            <input
-                              aria-label="Commentaire"
-                              value={draft.comment}
-                              onChange={(event) =>
-                                setEntryDraft({
-                                  ...draft,
-                                  comment: event.target.value,
-                                })
-                              }
-                            />
-                          </td>
-                          <td className="time-entry-actions">
-                            <button
-                              className="primary"
-                              disabled={saving}
-                              onClick={() => void saveEntry()}
-                            >
-                              Enregistrer
-                            </button>
-                            <button
-                              disabled={saving}
-                              onClick={() => setEntryDraft(null)}
-                            >
-                              Annuler
-                            </button>
-                          </td>
-                        </>
-                      ) : (
-                        <>
-                          <td>{entry.tasks?.code ?? "Tâche inconnue"}</td>
-                          <td>{entry.zones?.code ?? "Sans zone"}</td>
-                          <td>
-                            <strong>
-                              {Number(entry.hours).toLocaleString("fr-FR", {
-                                maximumFractionDigits: 2,
-                              })}{" "}
-                              h
-                            </strong>
-                          </td>
-                          <td>{entry.comment || "—"}</td>
-                          <td className="time-entry-actions">
-                            <button
-                              disabled={saving}
-                              onClick={() =>
-                                setEntryDraft({
-                                  id: entry.id,
-                                  taskId: entry.task_id,
-                                  zoneId:
-                                    entry.zone_id ?? zoneRows[0]?.id ?? "",
-                                  hours: String(Number(entry.hours)),
-                                  comment: entry.comment ?? "",
-                                })
-                              }
-                            >
-                              Modifier
-                            </button>
-                            <button
-                              className="danger-button"
-                              disabled={saving}
-                              onClick={() =>
-                                void deleteEntry(entry, personName)
-                              }
-                            >
-                              Supprimer
-                            </button>
-                          </td>
-                        </>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <label className="field">
+          Commentaire (facultatif)
+          <input
+            value={comment}
+            onChange={(event) => setComment(event.target.value)}
+            placeholder="Précision sur les travaux réalisés"
+          />
+        </label>
+      </section>
+
+      <section className="assign-done" aria-labelledby="assign-done">
+        <h3 id="assign-done">
+          {dayEntries.length
+            ? `Déjà saisi le ${dateLabel}`
+            : "Aucune heure saisie ce jour"}
+        </h3>
+        {dayEntries.map((entry) => {
+          const personName =
+            peopleRows.find((person) => person.id === entry.person_id)
+              ?.full_name ?? "Collaborateur inactif";
+          const draft = entryDraft?.id === entry.id ? entryDraft : null;
+          return (
+            <div className="assign-entry" key={entry.id}>
+              <div className="assign-entry-main">
+                <span>
+                  <b>
+                    {personName} · {hoursLabel(Number(entry.hours))}
+                  </b>
+                  <small>
+                    {entry.tasks?.code ?? "Tâche inconnue"} ·{" "}
+                    {entry.zones?.code ?? "Sans zone"}
+                    {entry.comment ? ` · ${entry.comment}` : ""}
+                  </small>
+                </span>
+                {!draft && (
+                  <span className="assign-entry-actions">
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={saving}
+                      onClick={() =>
+                        setEntryDraft({
+                          id: entry.id,
+                          taskId: entry.task_id,
+                          zoneId: entry.zone_id ?? zoneRows[0]?.id ?? "",
+                          hours: String(Number(entry.hours)),
+                          comment: entry.comment ?? "",
+                        })
+                      }
+                    >
+                      Modifier
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      disabled={saving}
+                      onClick={() => void deleteEntry(entry, personName)}
+                    >
+                      Supprimer
+                    </button>
+                  </span>
+                )}
+              </div>
+              {draft && (
+                <div className="assign-entry-edit">
+                  <label className="field">
+                    Tâche
+                    <select
+                      value={draft.taskId}
+                      onChange={(event) =>
+                        setEntryDraft({ ...draft, taskId: event.target.value })
+                      }
+                    >
+                      {taskRows.map((task) => (
+                        <option value={task.id} key={task.id}>
+                          {task.code} · {task.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    Zone
+                    <select
+                      value={draft.zoneId}
+                      onChange={(event) =>
+                        setEntryDraft({ ...draft, zoneId: event.target.value })
+                      }
+                    >
+                      {zoneRows.map((zone) => (
+                        <option value={zone.id} key={zone.id}>
+                          {zone.code} · {zone.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    Heures
+                    <input
+                      type="number"
+                      min="0.25"
+                      max="24"
+                      step="0.25"
+                      value={draft.hours}
+                      onChange={(event) =>
+                        setEntryDraft({ ...draft, hours: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    Commentaire
+                    <input
+                      value={draft.comment}
+                      onChange={(event) =>
+                        setEntryDraft({ ...draft, comment: event.target.value })
+                      }
+                    />
+                  </label>
+                  <span className="assign-entry-actions">
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={saving}
+                      onClick={() => void saveEntry()}
+                    >
+                      Enregistrer
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={saving}
+                      onClick={() => setEntryDraft(null)}
+                    >
+                      Annuler
+                    </button>
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </section>
+
+      <div className="assign-save">
+        <span>
+          {selectedIds.length
+            ? `${hoursLabel(total)} au total`
+            : "Cochez au moins une personne"}
+        </span>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={saving || !selectedIds.length || !Number(hours)}
+          onClick={() => void save()}
+        >
+          {saving
+            ? "Enregistrement…"
+            : selectedIds.length
+              ? `Affecter ${hoursLabel(Number(hours || 0))} à ${selectedIds.length} personne${selectedIds.length > 1 ? "s" : ""}`
+              : "Affecter les heures"}
+        </button>
       </div>
     </div>
   );
